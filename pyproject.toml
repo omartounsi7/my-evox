@@ -1,0 +1,60 @@
+# Describes this project to Python's packaging tools (pip, uv, ...)
+
+[build-system]
+# The tool that turns the src folder into an installable package
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-evox"
+version = "0.1.0"
+description = "A re-implementation of EvoX: evolving the search strategy of LLM-driven evolution"
+readme = "README.md"
+requires-python = ">=3.11"
+# Third-party packages the code needs to run
+dependencies = [
+    "openai>=1.0",  # talks to LLM servers that offer the OpenAI-compatible interface
+    "pyyaml>=6",    # reads the problem files
+    "numpy",        # imported by circle packing's evaluator and programs, which run on this
+                    #   machine until evaluators move into containers (step 1.2)
+]
+
+[project.optional-dependencies]
+# Tools needed only while developing; installed with: pip install -e ".[dev]"
+dev = [
+    "mypy>=1.10",    # type checker: finds type mistakes without running the code
+    "ruff>=0.6",     # linter and formatter: finds common bugs and keeps the style uniform
+    "types-PyYAML",  # type information for pyyaml, which mypy needs
+]
+
+[tool.setuptools.packages.find]
+# Tells setuptools that the package lives inside the src folder
+where = ["src"]
+
+[tool.mypy]
+# The folders mypy checks when run with no arguments
+files = ["src", "scripts", "tests"]
+# Where mypy finds the my_evox package when checking a single file
+mypy_path = "src"
+# Turn on every check, including "every function must have type hints"
+strict = true
+# Use mypy's pure-Python parser: Windows Application Control blocks the faster native one
+native_parser = false
+
+[tool.ruff]
+# Maximum line length, for both the linter and the formatter
+line-length = 100
+# The oldest Python version the code must keep working on
+target-version = "py311"
+# skydiscover's problem files stay as skydiscover wrote them (D3); the code in Markdown
+# files is laid out by hand, to be read
+extend-exclude = ["problems/*/initial_program.py", "problems/*/evaluator", "*.md"]
+
+[tool.ruff.lint]
+# Rule families to enforce:
+#   E, W = style errors and warnings    F = real mistakes (unused or undefined names)
+#   I    = import order                 B = common bug patterns
+#   UP   = outdated syntax              N = naming conventions
+select = ["E", "W", "F", "I", "B", "UP", "N"]
+# Exceptions may be named for what happened (StrategyRejected), without an "Error" suffix
+ignore = ["N818"]

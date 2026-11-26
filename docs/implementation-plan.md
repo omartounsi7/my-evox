@@ -58,8 +58,9 @@ strategies with a real scheduler (Phase 6).
   docstrings and comments (D46).
 - **The other repositories are sources, not dependencies** (D1). A step's **From** names the code it copies
   and adapts; a copied file keeps its licence notice. Nothing is imported from my-evolve or skydiscover.
-- **No experiment model while building** (D5). Tests use fake models; real runs use a cheap model, for
-  example my-evolve's local `qwen3-coder:30b` or GPT-5-mini. GPT-5 is spent only in Phase 8.
+- **No experiment model while building** (D5). Tests use fake models; real runs use `claude-haiku-5-5`
+  through Anthropic's OpenAI-compatible endpoint (Milestone 0 showed a 3B local model cannot write
+  strategies). GPT-5 is spent only in Phase 8.
 - **Platforms** (D46). The code avoids anything specific to one system; Docker is needed from Phase 1 (Docker
   Desktop on Windows). Whether `ale_bench` runs on Windows is checked at step 7.1.
 
@@ -79,23 +80,25 @@ strategies with a real scheduler (Phase 6).
 | 0.9 | The judge, basic: records, score, stagnation | D23 to D25 |
 | 0.10 | Writing and deploying a strategy, basic | D13, D16, D26, D31, D32 |
 | M0 | The first real run | |
-| **Phase 1** | **Solutions evaluated as designed** | |
+| **Phase 1** | **Solutions evaluated as designed, and what Milestone 0 asked for** | |
 | 1.1 | Statuses | D8, D33 |
 | 1.2 | Evaluators in containers; status `timeout` | D3, D10 |
 | 1.3 | Containers never outlive a run | D10 |
 | 1.4 | Circle packing, scored exactly as in the paper's runs | D3, D4 |
 | 1.5 | MinMaxMinDist | D3 |
 | 1.6 | Results in the prompt | D38 |
+| 1.7 | Every LLM call saved, with its role (was 2.1) | D6, D40, D41 |
+| 1.8 | The generic operator texts | D13, D14 |
+| 1.9 | The random strategy written as strategy code | D17, D31 |
 | M1 | The first run in containers | |
 | **Phase 2** | **The solution prompt and the LLMs** | |
-| 2.1 | Every LLM call saved, with its role | D6, D40, D41 |
 | 2.2 | my-evolve's reply parser, and descriptions | D38 |
 | 2.3 | Diffs | D37 |
 | 2.4 | Evolve blocks enforced; status `rejected` | D2, D33 |
 | 2.5 | Compiling and entry functions | D33 |
 | 2.6 | Duplicates | D33, D40 |
 | 2.7 | Retries for solutions | D6, D35 |
-| 2.8 | The operator texts | D13, D14 |
+| 2.8 | The operator texts' examples | D13, D14 |
 | 2.9 | The solution prompt of Appendix A | D13, D38 |
 | 2.10 | Model settings, API keys, test requests | D5, D39, D45 |
 | M2 | The first run with designed solution prompts | |
@@ -153,14 +156,14 @@ strategies with a real scheduler (Phase 6).
 | Component | In Phase 0 | Then, step by step |
 |---|---|---|
 | Evaluator | the problem's evaluator run as a subprocess on the host, JSON back; a score or an error | statuses (1.1) → containers, time limit (1.2) → cleanup (1.3) → the paper's exact scores (1.4, 1.5) → results shown (1.6) → C++ and `ale_bench` (7.1 to 7.3) |
-| Solution prompt | one system message; the inspirations and the parent with their scores and code; the direction, if any | results (1.6) → descriptions (2.2) → diffs (2.3) → the evolve-block rule (2.4) → failed attempts (2.7) → operator texts (2.8) → Appendix A's text and budget (2.9) |
-| Solution LLM and reply | one model; the reply's first code block | calls saved (2.1) → my-evolve's parser (2.2) → diffs (2.3) → checks (2.4 to 2.6) → retries (2.7) → settings, keys, test requests (2.10) |
+| Solution prompt | one system message; the inspirations and the parent with their scores and code; the direction, if any | results (1.6) → the generic operator texts (1.8) → descriptions (2.2) → diffs (2.3) → the evolve-block rule (2.4) → failed attempts (2.7) → the operator texts' examples (2.8) → Appendix A's text and budget (2.9) |
+| Solution LLM and reply | one model; the reply's first code block | calls saved (1.7) → my-evolve's parser (2.2) → diffs (2.3) → checks (2.4 to 2.6) → retries (2.7) → settings, keys, test requests (2.10) |
 | Store and view | every solution in memory; a view listing working solutions with id, score and code | fingerprints (2.6) → the designed view (3.3) → replay from the run folder (5.6) |
-| Strategies | `EvolvedSearchStrategy` loaded with `exec` in the run's process; the random built-in | a worker process (3.1) → Docker (3.2) → the view (3.3) → strikes (3.4) → the weighted built-in (3.5) |
-| Judge | records, a sum-of-records score, stagnation over the last $W$ children with an absolute $\tau$ | the designed score (4.1) → relative $\tau$ and minimum trial (4.2) → starvation (6.2) |
-| Strategy writer | a short prompt (problem, best scores, the current strategy's code); direction and code parsed; compile and interface checks; one attempt | checks as designed (3.6) → repair (3.7) → archive and champions (4.3) → parent and inspiration strategies (4.4) → statistics (4.5) → Appendix B (4.6) → in the background (6.3) → active strategies shown (6.5) |
+| Strategies | `EvolvedSearchStrategy` loaded with `exec` in the run's process; the random built-in | the random built-in as strategy code (1.9) → a worker process (3.1) → Docker (3.2) → the view (3.3) → strikes (3.4) → the weighted built-in (3.5) |
+| Judge | records, a sum-of-records score, stagnation over the last $W$ children with an absolute $\tau$ | the designed score (4.1) → relative $\tau$, minimum trial, no replacement near the end (4.2) → starvation (6.2) |
+| Strategy writer | a short prompt (problem, best scores, the current strategy's code); direction and code parsed; compile and interface checks; one attempt | checks as designed (3.6) → repair (3.7) → archive and champions (4.3) → parent and inspiration strategies, the initial one left out (4.4) → statistics (4.5) → Appendix B (4.6) → in the background (6.3) → active strategies shown (6.5) |
 | Scheduler | the one active strategy | $K$ slots, warm-up and round-robin (6.1) → sequential start (6.4) → the bandit (6.6) |
-| Loop and run folder | one iteration after another; console lines; `programs.jsonl`, `strategies.jsonl`, `best_program` | `llm_calls.jsonl`, `run.json` (2.1) → logging (5.1) → the full run folder (5.2) → threads (5.3) → errors (5.4) → Ctrl+C (5.5) → continuing (5.6, 5.7) → target and patience (5.8) → the report (5.9) |
+| Loop and run folder | one iteration after another; console lines; `programs.jsonl`, `strategies.jsonl`, `best_program` | `llm_calls.jsonl`, `run.json` (1.7) → logging (5.1) → the full run folder (5.2) → threads (5.3) → errors (5.4) → Ctrl+C (5.5) → continuing (5.6, 5.7) → target and patience (5.8) → the report (5.9) |
 
 The evaluator and the strategies both run LLM-written code on the host until they move into Docker (steps 1.2
 and 3.2). Until then, runs are short, watched, and made with a cheap model; from Milestone 3 on, every piece
@@ -243,7 +246,7 @@ simple as it can be while doing its job.
   package's own retries, an empty reply as an `LLMError`). `replies.py`: `extract_code(reply)`, the first
   fenced code block, or the whole reply if there is none. `tests/fakes.py`: `FakeLLM`, which returns replies
   written in advance.
-- **Not yet.** Settings, keys and roles (2.10); token counts (2.1); my-evolve's parser (2.2); diffs (2.3).
+- **Not yet.** Settings, keys and roles (2.10); token counts (1.7); my-evolve's parser (2.2); diffs (2.3).
 - **From.** my-evolve's `llm.py`, cut down.
 - **Check.** `extract_code` on replies with one block, several, and none; by hand, one question to the cheap
   model.
@@ -287,7 +290,7 @@ simple as it can be while doing its job.
 - **Not yet.** The strategy in its own process (3.1) and in Docker (3.2); the checks as designed (3.6);
   repair (3.7); the archive, champions, parent and inspiration strategies (4.3, 4.4); statistics (4.5);
   Appendix B's text (4.6). The change size a strategy chooses is recorded, but adds no text to the solution
-  prompt until the operator texts exist (2.8).
+  prompt until the operator texts exist (1.8).
 - **Check.** The end-to-end test grows: the random strategy stagnates; the fake strategy model writes a
   greedy strategy with a direction; the direction appears in the next solution prompts; a broken strategy
   is dropped and the old one keeps running.
@@ -297,12 +300,25 @@ simple as it can be while doing its job.
 the strategy model writes and its direction, and the time an iteration takes. This run is the baseline for
 what follows.
 
+**What it showed.** With `qwen2.5-coder:3b`, 6 of 10 children failed and neither of its two strategies
+passed its checks; Ollama also cut prompts silently to its 4096-token context. With `claude-haiku-5-5`, all 30
+children worked and the strategy level ran as designed: the random strategy raised the best from 0.96 to
+2.35 in 12 iterations, then three generated strategies raised it to 2.37. It led to these changes:
+- in the design: no strategy written when it could not get its trial (D25); the initial strategy kept out
+  of the parent draw, J being unfair to strategies deployed later (D24, D27); directions that never say how
+  far to move, analyses that claim only what the numbers support and say how the direction differs from
+  the revised one (D13, D31); Haiku as the milestones' model (D5); two more facts in the view (D15);
+- in the plan: LLM calls saved, the generic operator texts, and the random strategy written as strategy
+  code, all in Phase 1 (steps 1.7 to 1.9), since every milestone needs them.
+
 ---
 
 ## Phase 1: solutions evaluated as designed
 
 By the end of this phase every child is evaluated in its problem's container (D3, D10), has a status (D33),
-and gets exactly the paper's score for both math problems.
+and gets exactly the paper's score for both math problems. Steps 1.7 to 1.9 come from Milestone 0: every
+later milestone needs the calls' cost and replies, change sizes that reach the prompt, and an example
+strategy the strategy model can copy safely.
 
 ### Step 1.1. Statuses
 - **Builds.** `Status` with `ok`, `failed`, `invalid`, `timeout` and `error` (`rejected` comes in 2.4);
@@ -346,24 +362,49 @@ and gets exactly the paper's score for both math problems.
   `prompt.max_result_chars` (2,000, D38); the parent's line gives the run's best score.
 - **Check.** Results reach the prompt, cut; an empty field is left out with its label.
 
-### Milestone 1. The first run in containers
-Milestone 0's run again, now in containers, on both math problems. Look at the counts by status and at the
-time an iteration takes, split between the LLM and the evaluation.
-
----
-
-## Phase 2: the solution prompt and the LLMs
-
-By the end of this phase every LLM call is saved with its cost, replies are parsed as designed (diffs,
-descriptions), children are checked before they cost an evaluation and retried when they fail, and the
-solution prompt is Appendix A's.
-
-### Step 2.1. Every LLM call saved, with its role
+### Step 1.7. Every LLM call saved, with its role
+Moved here from Phase 2 (it was step 2.1): Milestone 0 had no record of what a call cost or how long it
+took, and its replies could be read only through a script outside the repository.
 - **Builds.** `complete` returns an `LLMReply` (`text`, `model`, `input_tokens`, `output_tokens`,
   `duration`). `llm_calls.jsonl` (D41): the role (solution or strategy), the iteration or the strategy, the
   model, the user message, the reply, the tokens, the duration, the cost (prices per model in the problem
   file, D6), and the error of a failed call. A first `run.json`: the run's id, its seed, the system messages.
 - **Check.** One line per call of either role, failed calls included; tokens summed per role.
+
+### Step 1.8. The generic operator texts
+In Milestone 0 strategies chose `refine` and `diverge`, but the solution prompt did not change with them.
+- **Builds.** The change size reaches the solution prompt, in Appendix A's "Change to make" block:
+  skydiscover's generic templates for `refine` and `diverge`, without examples (D14's `generic` texts), and
+  "Any change that improves the score." for `free`. The strategy prompt shows the three texts and says that
+  the direction never says how far to move from the parent (D13).
+- **Not yet.** The examples written by the strategy model (2.8); the rest of Appendix A (2.9).
+- **From.** skydiscover's `template.py`.
+- **Check.** The right text for each change; the strategy prompt shows all three.
+
+### Step 1.9. The random strategy written as strategy code
+In Milestone 0 both rejected strategies failed on lines copied from the random strategy's code, which the
+prompt showed as a framework class (`RandomStrategy`, without its imports).
+- **Builds.** The random built-in (D17) becomes source code written exactly as the strategy model must
+  write its own: a class named `EvolvedSearchStrategy`, its imports included, kept in the package as a
+  text file. It is loaded and checked like a generated strategy, is the stand-in for a failing strategy
+  (D36), and is the initial strategy's code shown in the strategy prompt. The framework's `RandomStrategy`
+  class is removed. Its generator is still derived from the run's seed (D44).
+- **Check.** Step 0.5's checks of the random strategy, run on the loaded code; the code the strategy prompt
+  shows passes `load_strategy` and the replay check as it stands.
+
+### Milestone 1. The first run in containers
+Milestone 0's run again, now in containers, on both math problems. Look at the counts by status and at the
+time an iteration takes, split between the LLM and the evaluation; at each call's cost (step 1.7); and at
+how often strategies choose each change size, now that it reaches the prompt (1.8).
+
+---
+
+## Phase 2: the solution prompt and the LLMs
+
+By the end of this phase replies are parsed as designed (diffs, descriptions), children are checked
+before they cost an evaluation and retried when they fail, and the solution prompt is Appendix A's. Step
+2.1, saving every LLM call, moved to Phase 1 after Milestone 0 (step 1.7); the other steps keep their
+numbers.
 
 ### Step 2.2. my-evolve's reply parser, and descriptions
 - **Builds.** my-evolve's `parse_reply` (ME-D68): thinking sections removed, the code block chosen as it
@@ -410,13 +451,12 @@ solution prompt is Appendix A's.
 - **Check.** Retries stop at the first working child or at the third attempt; the failed-attempts block's
   text; the budget counts every attempt; no retry after `error`.
 
-### Step 2.8. The operator texts
+### Step 2.8. The operator texts' examples
 - **Builds.** `operators.py`: at the start of a run, one call of the strategy model with skydiscover's
   generation prompt (the problem description, the evaluator's source, the packages of the benchmark's
   `requirements.txt`); the two example lists put into skydiscover's `DIVERGE_TEMPLATE` and
   `REFINE_TEMPLATE`, verbatim (D14); saved in the run folder. `operator_texts: generated | generic` in the
-  problem file. The strategy's `change` now selects the text of the "Change to make" block; the random
-  strategy still uses `free`.
+  problem file, `generic` keeping step 1.8's texts. The random strategy still uses `free`.
 - **From.** skydiscover's `variation_operator_generator.py` (the prompt, the parsing) and `template.py`.
 - **Check.** With a fake strategy model, the two texts built from its reply; the generic texts; the right text
   for each change.
@@ -435,6 +475,9 @@ solution prompt is Appendix A's.
   settings `max_tokens` (32,000), `timeout` (600 s), `reasoning_effort`; reasoning models handled as in
   my-evolve. Before the first iteration, a test request to every model; any failure stops the run (D39).
   Failures counted per model during the run; 3 in a row of a model with no alternative stop the run.
+- **Already there.** For Milestone 0 on a Claude model (through Anthropic's OpenAI-compatible
+  endpoint), Phase 0 gave the one model of the `llm` section `api_key: ${VARIABLE}` and `max_tokens`
+  (no default: the server's applies when it is absent). This step builds the rest around them.
 - **From.** my-evolve's `llm.py` settings, keys and ensemble (ME-D31 to ME-D34), and its fake
   OpenAI-compatible server.
 - **Check.** Each setting sent, or not; the key read from its variable; a test request that fails stops the
@@ -476,8 +519,9 @@ the run when it misbehaves, and is checked and repaired before it is deployed.
 - **Builds.** D15: every stored solution, failed ones included, as a frozen record (id, code, description,
   status, score, metrics, parent, inspirations, the strategy that chose its parent, its change, its
   iteration) with the computed facts (gain over the parent, $g_i$, rank among working solutions, number of
-  children); the run's facts (iteration, budget left, best score, active strategies); the strategy's own
-  facts (iterations, warm-up, records). The worker keeps its copy up to date from the `observe` messages, so
+  children); the run's facts (iteration, budget left, best score, iterations since the last record, active
+  strategies); the strategy's own facts (iterations, warm-up, records, and how many more of its children
+  without a record would retire it). In Milestone 0 every strategy rebuilt the last two itself, and badly. The worker keeps its copy up to date from the `observe` messages, so
   a `select` sends only what changed. The framework refuses a failed parent whatever the strategy returns.
 - **Check.** The computed facts on a made-up population; the worker's copy equal to the run's after many
   observes; a failed parent refused.
@@ -491,7 +535,8 @@ the run when it misbehaves, and is checked and repaired before it is deployed.
 
 ### Step 3.5. The weighted built-in, and the initial strategy as a setting
 - **Builds.** `WeightedStrategy`: my-evolve's parent rule (ME-D19), adapted to a flat population, written as
-  an `EvolvedSearchStrategy`. `initial_strategy: random | weighted` in the problem file (D17).
+  an `EvolvedSearchStrategy`, as the random one is since step 1.9. `initial_strategy: random | weighted` in
+  the problem file (D17).
 - **From.** my-evolve's `WeightedSelector`.
 - **Check.** Draw frequencies on a made-up population; the setting chooses the initial strategy.
 
@@ -531,10 +576,12 @@ champions, and the strategy model gets Appendix B's prompt. This completes the m
 
 ### Step 4.2. Stagnation, as designed
 - **Builds.** D25: $\tau$ relative to the best score, `tau_relative` (1%) with `tau_floor`; $W$ by default 10%
-  of the iterations; the minimum trial of $W$ children of its own.
+  of the iterations; the minimum trial of $W$ children of its own; no strategy written when fewer than
+  $n_{\min}$ iterations remain, the stagnated one running to the end (Phase 0 skips only the last
+  iteration).
 - **Not yet.** Starvation (6.2): with $K = 1$ it never fires before stagnation.
 - **Check.** The relative threshold on scores near 1, large, negative and near 0; no judgement before $W$
-  children.
+  children; no strategy written in the last $n_{\min}$ iterations.
 
 ### Step 4.3. Archive entries and champions
 - **Builds.** `archive.py`: D26's entries: code, analysis, direction, $J_s$, its champion (id, score, whether
@@ -547,7 +594,9 @@ champions, and the strategy model gets Appendix B's prompt. This completes the m
 ### Step 4.4. The parent strategy and the inspiration strategies
 - **Builds.** D27: the strategy to revise drawn with $p_j \propto e^{-\text{rank}_j / T}$ (`rank_temperature`,
   1); D28: the strategy that just ended, if it is not the parent, and draws by the same weights, up to 2.
-- **Check.** Draw frequencies; the strategy that just ended always shown; fewer when the archive is small.
+  The initial strategy is never drawn once a generated strategy exists (D27).
+- **Check.** Draw frequencies; the strategy that just ended always shown; fewer when the archive is small;
+  the initial strategy drawn only for the first replacement.
 
 ### Step 4.5. Population statistics
 - **Builds.** `statistics.py`: D30's statistics over the run's last $K \cdot W$ iterations, formatted as text
@@ -561,7 +610,9 @@ champions, and the strategy model gets Appendix B's prompt. This completes the m
 
 ### Step 4.6. The strategy prompt of Appendix B
 - **Builds.** Both messages exactly as in Appendix B: how the search works, $J_s$ in words, what to write,
-  the constraints (the view's fields, the limits), the reply format; the problem; the run so far; the
+  the change-size texts, the constraints (the view's fields, the limits), the reply format, the analysis
+  claiming only what the numbers support and ending with how the direction differs; the problem; the run
+  so far; the
   statistics; the 5 best solutions by score and description; the strategy to revise, with its champion's
   code; the other past strategies; the task. With $K = 1$ the active-strategies block is left out.
 - **Check.** The exact text for a made-up run.
@@ -795,24 +846,24 @@ are credited to it, as any child in flight is (D9).
 | D2 (any language) | 2.4, 2.5, 2.6, 7.2 |
 | D3 (problems and evaluators) | 0.2, 0.4, 1.2, 1.4, 1.5, 7.1 to 7.4 |
 | D4 (comparability, ablations) | 4.1, 5.10, Phase 8 |
-| D5 (models) | 0.7, 2.10 |
-| D6 (budget and cost) | 2.1, 2.7, 5.1 |
+| D5 (models) | 0.7, 2.10, and every milestone |
+| D6 (budget and cost) | 1.7, 2.7, 5.1 |
 | D7 (one machinery) | 0.10, 3.1, and how both levels share the LLM, parsing, checks and storage |
 | D8 (the solution loop) | 0.8, 1.1, 5.3 |
 | D9 (iterations in parallel) | 5.3 |
 | D10 (LLM-written code in Docker) | 1.2, 1.3, 3.1, 3.2 |
 | D11 (what a strategy is) | 0.5, 3.1 |
 | D12 (what a strategy decides) | 0.5, 3.3, 3.6 |
-| D13 (direction and change size) | 0.6, 0.10, 2.8, 2.9 |
-| D14 (operator texts) | 2.8 |
+| D13 (direction and change size) | 0.6, 0.10, 1.8, 2.8, 2.9, 4.6 |
+| D14 (operator texts) | 1.8, 2.8 |
 | D15 (the view) | 0.5, 3.3 |
 | D16 (a strategy's state, replay) | 0.10, 3.1, 5.6 |
-| D17 (built-in strategies) | 0.5, 3.4, 3.5 |
+| D17 (built-in strategies) | 0.5, 1.9, 3.4, 3.5 |
 | D18 (a flat population) | 0.5 |
 | D19 (the portfolio) | 6.1 |
 | D20 (scheduling) | 6.1, 6.6 |
 | D21 (sequential start) | 6.4 |
-| D22 (writing in the background) | 0.10 (the run waits), 6.3 |
+| D22 (writing in the background) | 0.10 (the run waits), 4.2, 6.3 |
 | D23 (records) | 0.9 |
 | D24 (the strategy score) | 0.9, 4.1 |
 | D25 (stagnation and starvation) | 0.9, 4.2, 6.2 |
@@ -820,7 +871,7 @@ are credited to it, as any child in flight is (D9).
 | D27, D28 (parent and inspiration strategies) | 4.4 |
 | D29 (one candidate per replacement) | 0.10 |
 | D30 (population statistics) | 4.3, 4.5 |
-| D31 (the strategy prompt) | 0.10, 4.6, 6.5 |
+| D31 (the strategy prompt) | 0.10, 1.8, 1.9, 4.6, 6.5 |
 | D32 (checks before deployment) | 0.10, 3.6 |
 | D33 (checks before evaluation, statuses) | 1.1, 2.4, 2.5, 2.6, 7.2 |
 | D34 (repairing a strategy) | 3.7, 6.3 |
@@ -830,7 +881,7 @@ are credited to it, as any child in flight is (D9).
 | D38 (the solution prompt) | 0.6, 1.6, 2.2, 2.9 |
 | D39 (LLM failures) | 0.8, 2.10, 3.7, 5.4 |
 | D40 (identifiers and memory) | 0.3, 0.5, 2.6 |
-| D41 (the run folder) | 0.8, 0.10, 2.1, 4.3, 5.2 |
+| D41 (the run folder) | 0.8, 0.10, 1.7, 4.3, 5.2 |
 | D42 (continuing a run) | 5.6 |
 | D43 (the report) | 5.9 |
 | D44 (randomness) | 0.5, 5.6 |
@@ -838,5 +889,5 @@ are credited to it, as any child in flight is (D9).
 | D46 (the project) | 0.1, and every step |
 | Section 13 (smaller features) | 5.1, 5.5, 5.8 |
 | Appendix A | 0.6, 2.9 |
-| Appendix B | 0.10, 4.6, 6.5 |
+| Appendix B | 0.10, 1.8, 1.9, 4.6, 6.5 |
 | Appendix C | the loop of 0.8 and 0.10, completed by 2.7, 6.1 to 6.4 |

@@ -1,0 +1,16 @@
+# The toy problem of the tests: solve() returns a number, scored as that number divided by 10.
+
+name: toy
+
+description: |
+  Write a function solve() that returns a number. The larger the number, the higher the score.
+
+# Never reached: the tests replace the model with a fake one
+llm:
+  model: fake-model
+  api_base: http://localhost:1/v1
+
+# How strategies are judged: small, so that the tests' short runs see stagnation
+strategies:
+  window: 2
+  threshold: 0.0

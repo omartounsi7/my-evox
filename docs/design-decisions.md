@@ -108,6 +108,9 @@ depended on Python in my-evolve becomes language-neutral or is done per language
   dimensions); then ALE-Bench-Lite's 10 problems, starting from ALE-Agent's C++ solutions, as in the paper.
 - **Everything about a problem comes from skydiscover's benchmarks**, unchanged: the initial program, the
   problem description (its `prompt.system_message`), and the evaluator, so that scores are the paper's.
+  One exception, which leaves scores alone: circle packing's container evaluator uses two things Windows
+  lacks (`SIGALRM` for its time limit, `/tmp` for its log), so both are made portable, and marked in the
+  file, so that the first steps can run it outside a container.
 - **Evaluators run as containers** (skydiscover's container protocol: a `Dockerfile` and an `evaluate.sh`
   that receives the program's path and prints JSON), never in the main process (D10). For circle packing
   this is the `evaluator/` folder's version; the top-level `evaluator.py` runs programs on the host.
@@ -157,7 +160,10 @@ depended on Python in my-evolve becomes language-neutral or is done per language
   provider's default reasoning effort (the paper states none).
 - Each role is configured as in my-evolve (ME-D31 to ME-D33): a list of models with weights, an endpoint and
   an API-key variable per model, so one model or an ensemble work alike.
-- During development both roles use a cheap model or a fake server, never the experiment model.
+- During development both roles use `claude-haiku-5-5`, through Anthropic's OpenAI-compatible endpoint, in
+  the milestones' real runs, and fake models in the tests; never the experiment model.
+  *Why:* in Milestone 0, a 3B local model (`qwen2.5-coder:3b`) failed 6 of its 10 children and never
+  wrote a strategy that passed its checks, while Claude Haiku 5.5 handled both levels for about $0.05 a run.
 
 ### D6. Budget and cost
 - **One iteration is one call to the solution model**, producing one child whatever its status. A retry
@@ -228,6 +234,8 @@ methods:
 - `select(view)`: called before each of the strategy's iterations, with a read-only view of the population
   (D15). It returns `Selection(parent_id, change, inspiration_ids)`.
 
+Its constructor receives the strategy's own random generator (D44), with which it makes every random draw.
+
 The direction is not part of the class: it comes with the strategy, in its own part of the strategy
 model's reply (D31).
 *Why:* in skydiscover a strategy stores the solutions itself, so it can lose or alter them, and a 777-line
@@ -258,6 +266,11 @@ the direction and the change size.
 - **Precedence**, stated in the solution prompt: the problem and its rules come first, the direction second,
   the change size third. The direction says what to pursue, the change size how far to move from the
   parent, so the two do not contradict each other.
+- **The direction never says how far to move** from the parent ("keep its structure", "avoid rewriting
+  the layout"): that is the change size's job. The strategy prompt says so, and shows the strategy model
+  the three change-size texts (D14), so that it knows what each one asks of the solution model.
+  *Why:* in Milestone 0, every direction the strategy model wrote told the solution model to keep the best
+  layout and avoid rewrites, which contradicted the `diverge` its own code chose after a stall.
 
 *Why:* in EvoX a strategy can only pick among three fixed instruction texts. A direction lets each strategy
 pass on what it learned from the population, in words; the paper's own case studies read as a sequence of
@@ -281,10 +294,14 @@ messages:
   metrics, parent, inspirations, the strategy that chose its parent, its change size, its iteration; and
   facts computed by the framework: its gain over its parent, its gain $g_i$ over the run's best score at
   the time (D23), its rank among working solutions, its number of children;
-- **the run**: the current iteration, the budget left, the best score, the number of active strategies;
-- **the strategy itself**: its number of iterations, whether it is in warm-up, its records.
+- **the run**: the current iteration, the budget left, the best score, the iterations since the last
+  record, the number of active strategies;
+- **the strategy itself**: its number of iterations, whether it is in warm-up, its records, and how many
+  more of its children without a record would retire it (D25).
 
-*Why:* computed facts make strategies shorter and less error-prone.
+*Why:* computed facts make strategies shorter and less error-prone. In Milestone 0 every strategy counted
+"children since the last record" itself; replay started each new one already counting its predecessor's
+stall, and thresholds above $W$ could never be reached before the strategy was retired.
 
 ### D16. A strategy's state
 Rebuilt by replay: before a new strategy's first `select`, its worker receives `observe(child)` for every
@@ -350,8 +367,9 @@ workers.
   pass, starting with its warm-up.
 - **The last strategy left stagnates** ($K = 1$): the run waits for its replacement, as in EvoX.
 - A retired strategy is not kept running: its iterations would be budget taken from better uses, and its
-  record stops when it is judged. The one exception: with $K = 1$, when every attempt to write a
-  replacement fails, the stagnated strategy keeps running until the next attempt (D34).
+  record stops when it is judged. Two exceptions, both with $K = 1$: when every attempt to write a
+  replacement fails, the stagnated strategy keeps running until the next attempt (D34); and near the end
+  of the run, when no replacement is written (D25), it keeps running to the end.
 - The strategy prompt is a snapshot of the population when it is built; records made meanwhile are seen by
   the next one. Only wall time changes; the budget does not.
 
@@ -394,6 +412,17 @@ $b_{\text{start}}$ the run's best score when $s$ was deployed.
   the same units.
 - With $K = 1$, $J_s$ is skydiscover's score without its clipping at 0; clipping the second case to 0 gives
   skydiscover's score back, if an experiment needs it.
+- **Known limit: strategies deployed at different moments are not compared fairly.** Gains get harder as
+  the best score rises, and $w(b_{\text{start}})$ grows too slowly to make up for it. In Milestone 0 (30
+  iterations, $K = 1$) the initial random strategy scored 0.67, the three strategies after it at most 0.012:
+  its first child alone gained 0.73, from 0.96 to 1.69, while each record of the later strategies gained
+  less than 0.02.
+  The same holds for the paper's $J$. D27 keeps the initial strategy out of the parent draw, which removes
+  the worst case.
+- **Possible future work: judge each strategy against a baseline of its own moment**, for example the gains
+  the random strategy makes at the same score level, or the record rate of the iterations just before the
+  strategy was deployed, so that strategies are compared by how much they did better than what their
+  moment allowed.
 
 ### D25. Stagnation and starvation
 Strategy $s$ is retired when either holds:
@@ -409,6 +438,11 @@ $$
   same on every scale.
 - **Minimum trial**: no strategy is judged before it has $W$ children of its own; its warm-up (D20) gives it
   these first. EvoX's strategies, too, run at least $W$ iterations.
+- **No replacement without a trial**: when fewer than $n_{\min}$ iterations of the run remain, no new
+  strategy is written, since it could never be judged. With $K = 1$ the stagnated strategy keeps running
+  to the end (D22); with $K > 1$ it is retired as usual, and its slot stays empty while the other
+  strategies share the last iterations. *Why:* in Milestone 0 a strategy was written at iteration 28 of 30;
+  the strategy model itself noted that only two iterations were left.
 - **Starvation**: a strategy that did well, then lost the bandit's favour, would get almost no iterations,
   keep its last $W$ children unchanged, and hold its slot forever; the second condition retires it.
   $K \cdot W$ iterations are about $W$ turns of each strategy. With $K = 1$ the second condition never fires
@@ -441,16 +475,21 @@ $$
 p_j \propto e^{-\,\text{rank}_j / T}, \qquad T = 1 \text{ by default.}
 $$
 
-Active strategies are drawn like the others.
+Active strategies are drawn like the others. **The initial strategy is never drawn once the archive holds
+a generated strategy**: it is a baseline, not a candidate. It is the parent only of the first strategy
+written.
 *Why:* the paper speaks of "score-biased selection" without a formula, and skydiscover always takes the
 best. Ranks ignore the score's scale and work with negative scores; with fewer than about 10 strategies per
-run, $T = 1$ gives the best most draws and the next ones some.
+run, $T = 1$ gives the best most draws and the next ones some. The initial strategy runs while gains are
+cheapest, so its $J_s$ outranks every later strategy (D24's known limit): in Milestone 0 it would have been
+the parent 64% of the time.
 
 ### D28. Inspiration strategies
 Up to 2 other strategies are shown besides the parent:
 - the strategy that just ended (stagnated, starved or struck out), if it is not the parent: its failure is
   the freshest evidence;
-- the rest drawn with D27's weights among the other entries, without replacement.
+- the rest drawn with D27's weights among the other entries, without replacement, the initial strategy
+  excluded as in D27.
 
 When no strategy just ended (a slot filled during the sequential start, or a retry after failed
 attempts), both are drawn; fewer are shown when the archive is small. When $K > 1$, the active strategies
@@ -500,8 +539,15 @@ Its text is Appendix B; the wording may be improved, the structure is decided.
   size, champion (score and description), how they ended, a summary of their deployment written by the
   framework, and their code. **The strategy to revise also shows its champion's code**, in full, so the
   strategy model sees concretely what the last direction produced.
+- **How directions are written**: the system message shows the three change-size texts (D14) and says that
+  the direction never says how far to move from the parent (D13).
 - **The reply** has three parts: an analysis of the run, the direction, and the class's code, written in
-  full (no diffs). The analysis is kept with the strategy, to explain later why it was written.
+  full (no diffs). The analysis is kept with the strategy, to explain later why it was written. It must
+  claim only what the numbers shown support, and it ends by saying how the new direction differs from the
+  revised strategy's, and why.
+  *Why:* in Milestone 0 two analyses credited a change size with records it had not set (the records came
+  from `free` and `diverge` children, the analyses credited `refine`), and strategies 2 and 3, each
+  revising the one before, ended with nearly the same direction.
 - **No other solution code** appears: descriptions say which approaches exist, and ALE-Bench-Lite programs
   of up to 45 KB (about 12,000 tokens each) would make the prompt too long.
 
@@ -842,6 +888,10 @@ while the strategy is active.
   {K*W} iterations of the run.
 - The solution LLM sees, in this order: your direction, the solutions you chose with
   their scores and descriptions, the parent, and the change size. It never sees your code.
+- The change size is one of these texts, chosen by your code at each iteration:
+  free: {the free text}
+  refine: {the refine text, with its examples}
+  diverge: {the diverge text, with its examples}
 
 # How strategies are scored
 {J_s in words: the sum of the records your children set, measured against the best
@@ -849,11 +899,15 @@ score at the moment each child was made; if you set none, how close your best ch
 came; divided by the square root of your number of iterations}
 
 # What you write
-1. A short analysis of the run: what has worked, what has not, what could work.
+1. A short analysis of the run: what has worked, what has not, what could work. Claim
+   only what the numbers shown support. End it with how your direction differs from
+   the direction of the strategy you revise, and why.
 2. One direction for the solution LLM: what to pursue, in at most {cap} characters.
    General enough that children made from different parents still differ; concrete
-   enough to act on. It must not contradict the problem's rules.
+   enough to act on. It must not contradict the problem's rules. It never says how far
+   to move from the parent (keep the structure, rewrite it): the change size says that.
 3. The class EvolvedSearchStrategy, which serves your direction:
+   - __init__(rng): rng is a random.Random of your own; make every random draw with it.
    - observe(child): called after every child (yours and other strategies'), in order;
      update your own state here.
    - select(view) -> Selection(parent_id, change, inspiration_ids), where change is
@@ -934,7 +988,11 @@ Your strategy failed: {error}. Reply again in the same format.
 ````
 
 Notes:
-- The initial strategy has no direction; where it is shown, its Direction line says "none".
+- The initial strategy has no direction; where it is shown, its Direction line says "none". Revising it,
+  the analysis ends with how the new direction differs from having none.
+- Code shown in the prompt, the built-in strategies' included, is written exactly as the strategy model
+  must write its own (a class named `EvolvedSearchStrategy`, with its imports), so that a copied line
+  runs: in Milestone 0 both rejections came from copied lines.
 - A failed reply is followed by the repair message, up to 3 attempts in all (D34).
 - In the ablation without prompt evolution (D4), the prompt asks for no direction: the reply has an
   analysis and the class only, and the system message no longer mentions a direction.
@@ -994,13 +1052,17 @@ Require: checks CHECK(·) and VALID(·); initial program x₀; initial strategy 
 15:   for all S'' ∈ 𝒜 do
 16:     stagnated ← n_S'' ≥ W and max{g : last W children of S''} ≤ τ
 17:     starved   ← n_S'' ≥ W and no g > 0 among the children of S'' made in the last K·W iterations
-18:     if stagnated or starved or strikes(S'') ≥ 3 then
+18:     if (stagnated or starved) and (|𝒜| > 1 or T − t ≥ n_min) or strikes(S'') ≥ 3 then
+                                                                    ▷ near the end, the last active
+                                                                    ▷   strategy keeps running (D25),
+                                                                    ▷   or S₀'s rule if it struck out
 19:       𝒜 ← 𝒜 ∖ {S''};  mark S'' retired in ℋ, with its reason and J_S''
 20:     end if
 21:   end for
       Phase III: strategy evolution, when a slot is free (D21, D22)
 22:   if |𝒜| < K and no strategy is being written
-          and S₀ has finished its warm-up of n_min iterations then
+          and S₀ has finished its warm-up of n_min iterations
+          and T − t ≥ n_min then                                    ▷ a new strategy must get its trial (D25)
 23:     if 𝒜 = ∅ then WRITE-STRATEGY()                             ▷ K = 1: the run waits, as in EvoX
 24:     else start WRITE-STRATEGY() in the background             ▷ the other strategies keep running
 25:     end if
@@ -1009,7 +1071,8 @@ Require: checks CHECK(·) and VALID(·); initial program x₀; initial strategy 
 28: return argmax_{(x, s, a) ∈ 𝒟} s
 
 procedure WRITE-STRATEGY()                                          ▷ D27, D28, D31, D32, D34
-29:   S_par ~ p_j ∝ exp(−rank_j / T_r) over ℋ, ranked by J            ▷ the strategy to revise
+29:   S_par ~ p_j ∝ exp(−rank_j / T_r) over ℋ, ranked by J            ▷ the strategy to revise;
+                                                                    ▷   S₀ only while ℋ holds no other (D27)
 30:   ℐ_ℋ ← {the strategy that just ended, if ≠ S_par} ∪ draws by the same weights, |ℐ_ℋ| ≤ 2
 31:   for attempt = 1 to 3 do
 32:     (analysis, d', S') ~ 𝒢_str(· | S_par, ℐ_ℋ, 𝒜, φ(𝒟), previous attempts and errors)
