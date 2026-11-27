@@ -10,6 +10,10 @@ llm:
   model: fake-model
   api_base: http://localhost:1/v1
 
+# Seconds an evaluation may take: the toy's take milliseconds
+evaluation:
+  timeout: 10
+
 # How strategies are judged: small, so that the tests' short runs see stagnation
 strategies:
   window: 2

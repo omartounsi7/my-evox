@@ -1,44 +1,67 @@
-"""Tests of the Evaluator: the evaluator script run on a solution, and its output read."""
+"""Tests of the Evaluator: the evaluator run on a solution, its output read, its status given.
+
+These run the toy problem's evaluator on this machine; test_containers.py runs evaluators in
+their containers.
+"""
 
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from fakes import toy_problem, toy_program
+from fakes import toy_evaluator, toy_problem, toy_program
 
-from my_evox.evaluator import Evaluator, result_from_output
-from my_evox.problem import Problem
+from my_evox.evaluator import RunOutput, result_from_run
+from my_evox.problem import EvaluationSettings
+from my_evox.records import Status
 
-CIRCLE_PACKING = Path(__file__).parent.parent / "problems" / "circle_packing"
+
+def output(stdout: str, stderr: str = "", exit_code: int | None = 0) -> RunOutput:
+    """Return the output of a run of the evaluator that took one second."""
+    return RunOutput(stdout, stderr, exit_code, 1.0)
 
 
-class ToyEvaluationTest(unittest.TestCase):
+class ToyStatusTest(unittest.TestCase):
+    """One test per status, with the toy problem's evaluator."""
+
     def setUp(self) -> None:
-        self.evaluator = Evaluator(toy_problem())
+        self.evaluator = toy_evaluator()
 
-    def test_a_working_program_gets_its_score(self) -> None:
+    def test_ok_a_working_program_gets_its_score(self) -> None:
         result = self.evaluator.evaluate(toy_program("3"))
-        self.assertEqual(result.score, 0.3)
-        self.assertIsNone(result.error)
-
-    def test_the_score_is_not_among_the_metrics(self) -> None:
-        result = self.evaluator.evaluate(toy_program("3"))
+        self.assertEqual((result.status, result.score, result.error), (Status.OK, 0.3, None))
+        # The score is kept apart from the evaluator's other numbers
         self.assertEqual(result.metrics, {"validity": 1.0})
+        self.assertGreater(result.duration, 0.0)
 
-    def test_a_failing_program_gets_its_traceback(self) -> None:
+    def test_failed_a_program_that_raises_gets_its_traceback(self) -> None:
         result = self.evaluator.evaluate(toy_program("1 / 0"))
+        self.assertEqual(result.status, Status.FAILED)
         self.assertIsNone(result.score)
         self.assertIn("ZeroDivisionError", result.error or "")
 
-    def test_an_invalid_answer_gets_the_evaluator_reason(self) -> None:
+    def test_invalid_an_answer_against_the_rules_gets_the_evaluator_reason(self) -> None:
         result = self.evaluator.evaluate(toy_program("'abc'"))
-        self.assertIsNone(result.score)
+        self.assertEqual(result.status, Status.INVALID)
         self.assertIn("not a number", result.error or "")
 
-    def test_a_program_that_kills_the_evaluator_is_an_error(self) -> None:
-        """The program ends the evaluator's process before it prints: no JSON comes back."""
+    def test_timeout_a_program_that_never_ends(self) -> None:
+        problem = replace(toy_problem(), evaluation=EvaluationSettings(timeout=1))
+        program = "def solve():\n    while True:\n        pass\n"
+        result = toy_evaluator(problem).evaluate(program)
+        self.assertEqual(result.status, Status.TIMEOUT)
+        self.assertIn("time limit of 1 s", result.error or "")
+
+    def test_error_a_program_that_kills_the_evaluator(self) -> None:
+        """The program ends the evaluator's process with an error code: the evaluator broke."""
         program = "import os\n\ndef solve():\n    os._exit(3)\n"
         result = self.evaluator.evaluate(program)
-        self.assertIsNone(result.score)
+        self.assertEqual(result.status, Status.ERROR)
+        self.assertIn("exited with code 3", result.error or "")
+
+    def test_error_no_json_at_all(self) -> None:
+        program = "import os\n\ndef solve():\n    os._exit(0)\n"
+        result = self.evaluator.evaluate(program)
+        self.assertEqual(result.status, Status.ERROR)
         self.assertIn("printed no JSON", result.error or "")
 
     def test_lines_the_program_prints_are_ignored(self) -> None:
@@ -53,33 +76,48 @@ class ToyEvaluationTest(unittest.TestCase):
 
 
 class OutputTest(unittest.TestCase):
-    def test_output_that_is_not_json_is_an_error(self) -> None:
-        result = result_from_output("hello\n", "Traceback: it broke")
-        self.assertIsNone(result.score)
+    """The statuses read from how the evaluator's run ended, and from its JSON object."""
+
+    def test_timeout_stopped_at_the_time_limit(self) -> None:
+        stopped = RunOutput("", "", None, 360.0, timed_out=True)
+        result = result_from_run(stopped, 360)
+        self.assertEqual(result.status, Status.TIMEOUT)
+        self.assertIn("time limit of 360 s", result.error or "")
+
+    def test_timeout_the_evaluator_stopped_the_program(self) -> None:
+        stdout = '{"status": "timeout", "combined_score": 0.0, "artifacts": {"error": "300 s"}}'
+        result = result_from_run(output(stdout), 360)
+        self.assertEqual((result.status, result.error), (Status.TIMEOUT, "300 s"))
+
+    def test_failed_killed_most_likely_for_its_memory(self) -> None:
+        killed = RunOutput("", "", 137, 2.0, killed=True)
+        result = result_from_run(killed, 360)
+        self.assertEqual(result.status, Status.FAILED)
+        self.assertIn("memory", result.error or "")
+
+    def test_any_other_status_is_a_failure_of_the_program(self) -> None:
+        stdout = '{"status": "error", "combined_score": 0.0, "artifacts": {"error": "bad shape"}}'
+        result = result_from_run(output(stdout), 360)
+        self.assertEqual((result.status, result.error), (Status.FAILED, "bad shape"))
+
+    def test_the_traceback_is_preferred_to_the_error(self) -> None:
+        artifacts = '{"error": "boom", "traceback": "Traceback ... boom"}'
+        stdout = f'{{"status": "error", "combined_score": 0, "artifacts": {artifacts}}}'
+        self.assertEqual(result_from_run(output(stdout), 360).error, "Traceback ... boom")
+
+    def test_a_score_that_is_not_finite_is_invalid(self) -> None:
+        stdout = '{"status": "success", "combined_score": NaN, "metrics": {"validity": 1}}'
+        self.assertEqual(result_from_run(output(stdout), 360).status, Status.INVALID)
+
+    def test_no_score_is_an_error(self) -> None:
+        stdout = '{"status": "success", "metrics": {"validity": 1}}'
+        self.assertEqual(result_from_run(output(stdout), 360).status, Status.ERROR)
+
+    def test_an_exit_code_other_than_zero_is_an_error_whatever_was_printed(self) -> None:
+        stdout = '{"status": "success", "combined_score": 1.0}'
+        result = result_from_run(output(stdout, "Traceback: it broke", 1), 360)
+        self.assertEqual(result.status, Status.ERROR)
         self.assertIn("it broke", result.error or "")
-
-    def test_a_status_other_than_success_is_an_error(self) -> None:
-        output = '{"status": "timeout", "combined_score": 0.0, "metrics": {}}'
-        result = result_from_output(output, "")
-        self.assertEqual(result.error, "the evaluator's status is 'timeout'")
-
-    def test_a_score_that_is_not_a_number_is_an_error(self) -> None:
-        output = '{"status": "success", "combined_score": NaN, "metrics": {"validity": 1}}'
-        self.assertIsNone(result_from_output(output, "").score)
-
-
-class CirclePackingEvaluationTest(unittest.TestCase):
-    def test_the_initial_program_scores_its_sum_of_radii(self) -> None:
-        """As run by hand in step 0.2: the sum of the radii, 0.9598."""
-        problem = Problem.load(
-            CIRCLE_PACKING / "problem.yaml",
-            CIRCLE_PACKING / "initial_program.py",
-            CIRCLE_PACKING / "evaluator",
-        )
-        code = problem.initial_program.read_text(encoding="utf-8")
-        result = Evaluator(problem).evaluate(code)
-        self.assertAlmostEqual(result.score or 0.0, 0.9597642169962064)
-        self.assertEqual(result.metrics["validity"], 1.0)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,47 @@
+# MinMaxMinDist: 14 points in 3 dimensions, maximizing the ratio of their smallest to their
+# largest distance (AlphaEvolve's problem B.8). The description is skydiscover's
+# prompt.system_message for this benchmark, verbatim (D3).
+
+name: min_max_min_dist_3
+
+description: |
+  SETTING:
+  You are an expert computational geometer and optimization specialist focusing on 3D point dispersion problems.
+  Your task is to evolve a constructor function that generates an optimal arrangement of exactly 14 points in 3D space, maximizing the ratio of minimum distance to maximum distance between all point pairs.
+
+  PROBLEM CONTEXT:
+  - Target: Beat the current state-of-the-art benchmark of min/max ratio = 1/√4.165849767 ≈ 0.4898
+  - Constraint: Points must be placed in 3D Euclidean space (typically normalized to unit cube [0,1]³ or unit sphere)
+  - Mathematical formulation: For points Pi = (xi, yi, zi), i = 1,...,14:
+    * Distance matrix: dij = √[(xi-xj)² + (yi-yj)² + (zi-zj)²] for all i≠j
+    * Minimum distance: dmin = min{dij : i≠j}
+    * Maximum distance: dmax = max{dij : i≠j}
+    * Objective: maximize dmin/dmax subject to spatial constraints
+
+  PERFORMANCE METRICS:
+  1. **min_max_ratio**: dmin/dmax ratio (PRIMARY OBJECTIVE - maximize)
+  2. **combined_score**: min_max_ratio / 0.4898 (progress toward beating AlphaEvolve benchmark)
+  3. **eval_time**: Execution time in seconds (balance accuracy vs. efficiency)
+
+  TECHNICAL REQUIREMENTS:
+  - **Reproducibility**: Fixed random seeds for all stochastic components
+
+# The model that writes solutions and strategies while my-evox is being built (D5): never the
+# experiment model
+llm:
+  model: claude-haiku-5-5
+  api_base: https://api.anthropic.com/v1/
+  api_key: ${ANTHROPIC_API_KEY}
+  max_tokens: 16000
+  price_input: 0.10    # dollars per million tokens, for the cost of each call (D6)
+  price_output: 0.50
+
+# Seconds an evaluation may take: skydiscover's evaluator.timeout for this benchmark
+evaluation:
+  timeout: 360
+
+# How strategies are judged (D25): Milestone 0's values, for a run of 30 iterations
+strategies:
+  window: 5        # W: a strategy stagnates when none of its last 5 children sets a record
+  threshold: 1.0e-6   # tau: smaller gains are rounding noise between equal solutions
+                      #   (Milestone 1 saw gains of 1e-16 to 1e-9 counted as records)

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+# my-evox: scores one program with skydiscover's top-level evaluator.py, the one its reproduce
+# scripts gave the paper's runs. skydiscover's wrapper.py turns the dictionary evaluate() returns into
+# the container protocol's JSON, as skydiscover does for its other evaluate()-style evaluators.
+# Usage: evaluate.sh PROGRAM_PATH MODE (the mode is ignored).
 set -euo pipefail
-
-PROGRAM="$1"
-# MODE ($2) is accepted but ignored — pure optimization has no data split.
-
-echo "[$(date '+%H:%M:%S')] eval start: $PROGRAM" >> /tmp/eval.log
-python /benchmark/evaluator.py "$PROGRAM"
+cd /benchmark
+python -c 'from wrapper import run; from evaluator import evaluate; run(evaluate)' "$1"

@@ -161,7 +161,7 @@ strategies with a real scheduler (Phase 6).
 | Store and view | every solution in memory; a view listing working solutions with id, score and code | fingerprints (2.6) → the designed view (3.3) → replay from the run folder (5.6) |
 | Strategies | `EvolvedSearchStrategy` loaded with `exec` in the run's process; the random built-in | the random built-in as strategy code (1.9) → a worker process (3.1) → Docker (3.2) → the view (3.3) → strikes (3.4) → the weighted built-in (3.5) |
 | Judge | records, a sum-of-records score, stagnation over the last $W$ children with an absolute $\tau$ | the designed score (4.1) → relative $\tau$, minimum trial, no replacement near the end (4.2) → starvation (6.2) |
-| Strategy writer | a short prompt (problem, best scores, the current strategy's code); direction and code parsed; compile and interface checks; one attempt | checks as designed (3.6) → repair (3.7) → archive and champions (4.3) → parent and inspiration strategies, the initial one left out (4.4) → statistics (4.5) → Appendix B (4.6) → in the background (6.3) → active strategies shown (6.5) |
+| Strategy writer | a short prompt (problem, best scores and the best solution's results, the current strategy's code); direction and code parsed; compile and interface checks; one attempt | checks as designed (3.6) → repair (3.7) → archive and champions (4.3) → parent and inspiration strategies, the initial one left out (4.4) → statistics (4.5) → Appendix B (4.6) → in the background (6.3) → active strategies shown (6.5) |
 | Scheduler | the one active strategy | $K$ slots, warm-up and round-robin (6.1) → sequential start (6.4) → the bandit (6.6) |
 | Loop and run folder | one iteration after another; console lines; `programs.jsonl`, `strategies.jsonl`, `best_program` | `llm_calls.jsonl`, `run.json` (1.7) → logging (5.1) → the full run folder (5.2) → threads (5.3) → errors (5.4) → Ctrl+C (5.5) → continuing (5.6, 5.7) → target and patience (5.8) → the report (5.9) |
 
@@ -396,6 +396,21 @@ prompt showed as a framework class (`RandomStrategy`, without its imports).
 Milestone 0's run again, now in containers, on both math problems. Look at the counts by status and at the
 time an iteration takes, split between the LLM and the evaluation; at each call's cost (step 1.7); and at
 how often strategies choose each change size, now that it reaches the prompt (1.8).
+
+**What it showed.** With `claude-haiku-5-5`, 30 iterations of each problem: all 60 children `ok`, no failed
+call, all 7 generated strategies deployed, $0.25 in all (about $0.005 a solution call on circle packing,
+$0.003 on MinMaxMinDist, $0.002 a strategy call; replies cost more than prompts). An iteration took about
+55 s on circle packing and 39 s on MinMaxMinDist, half in the LLM and half in the evaluation, whose share
+grew as programs optimised longer (up to 106 s; the two runs shared the machine). Circle packing reached
+0.99801 (a sum of 2.6298); MinMaxMinDist reached 1.000016, the best known value, at iteration 2, so it
+cannot tell strategies apart and serves as a quick check. Generated strategies chose `free` 22 times,
+`refine` 11 and `diverge` 13; one `diverge` child made the largest gain after the first iteration, no
+`refine` child set a real record. It led to these changes:
+- the strategy prompt shows the best solution's results (D31): with scores alone, the strategy model read
+  circle packing's 0.998 as a sum of radii far below 2.635;
+- both problem files set $\tau$ to $10^{-6}$: with $\tau = 0$, rounding noise (gains of $10^{-16}$ to
+  $10^{-9}$ between equal solutions) counted as records four times and kept one strategy five more
+  iterations. Step 4.2's relative $\tau$ with its floor replaces this.
 
 ---
 
@@ -827,6 +842,11 @@ when the best score is within $10^{-4}$ of 0.
 **P6. The solution containers' limits** (step 1.2). D10 puts solutions in their evaluator's container,
 built from skydiscover's `Dockerfile`, but does not say with which limits. Proposed: no network and
 my-evolve's memory and CPU limits, unless an evaluator needs otherwise (ALE's may, step 7.1).
+*Settled at step 1.2:* no network; a read-only file system except a 512 MB `/tmp`; 2 GB of memory
+without swap; 256 processes; no capabilities, no new privileges, the `nobody` user; and no CPU limit,
+since skydiscover sets none and a program that searches for a fixed time then runs as on the paper's host.
+A program over the memory limit is killed (status `failed`), after about 20 s of memory pressure with
+Docker Desktop.
 
 **P7. Identical children in flight** (step 5.3). As in my-evolve's plan: with several workers, the duplicate
 check sees only stored solutions. Proposed: the main thread also holds the fingerprints of the children

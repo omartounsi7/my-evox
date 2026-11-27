@@ -23,8 +23,15 @@ llm:
   api_base: https://api.anthropic.com/v1/
   api_key: ${ANTHROPIC_API_KEY}
   max_tokens: 16000
+  price_input: 0.10    # dollars per million tokens, for the cost of each call (D6)
+  price_output: 0.50
+
+# Seconds an evaluation may take: skydiscover's evaluator.timeout for this benchmark
+evaluation:
+  timeout: 360
 
 # How strategies are judged (D25): Milestone 0's values, for a run of 30 iterations
 strategies:
   window: 5        # W: a strategy stagnates when none of its last 5 children sets a record
-  threshold: 0.0   # tau: any gain above 0 counts as progress
+  threshold: 1.0e-6   # tau: smaller gains are rounding noise between equal solutions
+                      #   (Milestone 1 saw gains of 1e-16 to 1e-9 counted as records)

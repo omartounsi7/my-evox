@@ -39,8 +39,12 @@ python -m venv .venv
 
 ## Running a problem
 
-For now, every program runs as a plain process on this machine, with your files and your network, and
-without a time limit: containers arrive in step 1.2 of the plan. Keep runs short, and watch them.
+A run needs Docker, installed and running (Docker Desktop on Windows). Every child is evaluated in a
+container built from the problem's evaluator folder, without network, with a read-only file system
+except `/tmp`, limited memory and processes, and within the problem file's `evaluation.timeout`. The
+image is built the first time it is needed, which takes a few minutes; the container is removed when
+the run ends. `--unsafe-local-evaluation` runs the evaluator folder's `evaluator.py` as a plain process
+on this machine instead, with your files and your network: it is for the tests' toy problem.
 
 A run needs the problem file's model reachable: for now it writes both the solutions and, whenever
 the active strategy stagnates, its replacement. Circle packing's problem file names `claude-haiku-5-5`,
@@ -67,12 +71,16 @@ otherwise, and a circle-packing prompt with four other solutions takes 6,000 tok
 .venv/bin/python scripts/run.py problems/circle_packing/initial_program.py problems/circle_packing/evaluator --config problems/circle_packing/problem.yaml --iterations 30 --output runs/circle_packing_1
 ```
 
+The other problem, MinMaxMinDist in 3 dimensions, runs the same way from `problems/min_max_min_dist_3/`.
+Each problem's README says where its files come from and how its score compares with the paper's.
+
 | Flag | Meaning | Default |
 |---|---|---|
 | `--config` | The problem file: the problem's description and its model | required |
 | `--iterations` | How many iterations in all | required |
 | `--output` | The run folder; it must not already hold a run | `runs/<problem>_<date>_<time>` |
 | `--seed` | The seed of the run's random draws | drawn, and printed |
+| `--unsafe-local-evaluation` | Evaluate on this machine, without Docker or any isolation: tests only | off |
 
 The console shows one line per iteration, and each change of strategy. The run folder holds:
 
@@ -80,7 +88,12 @@ The console shows one line per iteration, and each change of strategy. The run f
 |---|---|
 | `programs.jsonl` | Every solution, one line of JSON each, written as it is stored |
 | `strategies.jsonl` | Every strategy, rejected ones included, with its direction, analysis, code, status and score; written again when its status or score changes, so that its last line is its current state |
+| `llm_calls.jsonl` | Every call to a model, failed ones included: its role (solution or strategy), the user message, the reply, the tokens, the time and the cost |
+| `run.json` | The run's id, its seed, its models, and the system messages of both prompts |
 | `best_program.py` | The best solution so far |
+
+The console's last lines give each role's calls, tokens and cost; the cost needs the problem file's
+`price_input` and `price_output`, in dollars per million tokens.
 
 ## Everyday commands
 
@@ -88,7 +101,7 @@ These are written for Linux and macOS. On Windows, replace `.venv/bin/python` wi
 `.venv\Scripts\python.exe`.
 
 ```bash
-# Run the tests
+# Run the tests (those that need Docker are skipped without it; the first run builds images)
 .venv/bin/python -m unittest discover tests
 
 # Check the types

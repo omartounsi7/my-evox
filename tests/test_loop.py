@@ -6,19 +6,22 @@ This test grows with every step of the plan.
 import contextlib
 import io
 import json
+import random
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 
-from fakes import GREEDY_STRATEGY, TOY, FakeLLM, strategy_reply, toy_problem
+from fakes import GREEDY_STRATEGY, TOY, FakeLLM, strategy_reply, toy_evaluator, toy_problem
 
-from my_evox.evaluator import Evaluator
 from my_evox.llm import LLMError
 from my_evox.loop import RunError, run
 from my_evox.problem import Problem
 from my_evox.records import Solution
+from my_evox.replies import find_code_block
 from my_evox.store import Store
+from my_evox.strategies import random_strategy_code
+from my_evox.strategy_loader import load_strategy, replay_and_check
 
 # What the fake solution model replies: better programs, one that raises, one without code
 BETTER = "Here is a better one:\n```python\ndef solve():\n    return 5\n```"
@@ -70,10 +73,11 @@ class LoopTest(unittest.TestCase):
                 problem,
                 solution_model,
                 strategy_model,
-                Evaluator(problem),
+                toy_evaluator(problem),
                 iterations,
                 self.output,
                 seed=1,
+                run_id="test-run",
             )
 
     def strategy_lines(self) -> list[dict[str, Any]]:
@@ -105,6 +109,10 @@ class LoopTest(unittest.TestCase):
         self.run_toy(model, iterations=1)
         self.assertIn("return 1.0", model.prompts[0].user)
         self.assertIn(toy_problem().description.strip(), model.prompts[0].system)
+        # The parent's results and the run's best score (D38)
+        self.assertIn(
+            "best score so far in this run: 0.100000\nResults: validity 1\n", model.prompts[0].user
+        )
 
     def test_a_failed_model_call_skips_the_iteration(self) -> None:
         store = self.run_toy(FakeLLM([LLMError("fake-model: down"), BETTER]), iterations=2)
@@ -118,6 +126,13 @@ class LoopTest(unittest.TestCase):
         best_program = (self.output / "best_program.py").read_text(encoding="utf-8")
         self.assertEqual(best_program, store.all()[1].code)
 
+    def test_the_status_is_saved_and_shown(self) -> None:
+        self.run_toy(FakeLLM([BETTER, RAISES]), iterations=2)
+        lines = (self.output / "programs.jsonl").read_text(encoding="utf-8").splitlines()
+        statuses = [json.loads(line)["result"]["status"] for line in lines]
+        self.assertEqual(statuses, ["ok", "ok", "failed"])
+        self.assertIn("iteration 2/2: failed: ValueError: no answer", self.console.getvalue())
+
     def test_the_console_shows_the_strategy_and_its_score(self) -> None:
         """The record of BETTER (0.5 over 0.1) is the strategy's score, J = 0.4."""
         self.run_toy(FakeLLM([BETTER]), iterations=1)
@@ -130,8 +145,12 @@ class LoopTest(unittest.TestCase):
         solution_model = FakeLLM([BETTER, RAISES, RAISES, EVEN_BETTER])
         strategy_model = FakeLLM([strategy_reply(GREEDY_STRATEGY)])
         store = self.run_toy(solution_model, iterations=4, strategy_model=strategy_model)
-        # The strategy model saw the random strategy's code
-        self.assertIn("class RandomStrategy", strategy_model.prompts[0].user)
+        # The strategy model saw the random strategy's code, which runs as it stands when copied
+        shown = strategy_model.prompts[0].user
+        self.assertIn(random_strategy_code().rstrip(), shown)
+        current_code = find_code_block(shown.split("# Current strategy", 1)[1]) or ""
+        copied = load_strategy(current_code, random.Random(1))
+        replay_and_check(copied, store)
         prompts = [prompt.user for prompt in solution_model.prompts]
         self.assertFalse(any("Direction" in prompt for prompt in prompts[:3]))
         self.assertTrue(prompts[3].startswith("# Direction of the search\nReturn larger numbers."))
@@ -163,6 +182,38 @@ class LoopTest(unittest.TestCase):
         children = store.all()[1:]
         random_id, greedy_id = lines[0]["id"], lines[3]["id"]
         self.assertEqual([child.strategy_id for child in children], [random_id] * 4 + [greedy_id])
+
+    def test_every_call_is_saved_with_its_role_failed_ones_included(self) -> None:
+        """A record, a failed call, two failures: the random strategy stagnates after
+        iteration 4, and the strategy model writes strategy 1 before iteration 5."""
+        solution_model = FakeLLM(
+            [BETTER, LLMError("fake-model: down"), RAISES, RAISES, BETTER],
+            price_input=1.0,
+            price_output=2.0,
+        )
+        strategy_model = FakeLLM([strategy_reply(GREEDY_STRATEGY)])
+        self.run_toy(solution_model, iterations=5, strategy_model=strategy_model)
+        text = (self.output / "llm_calls.jsonl").read_text(encoding="utf-8")
+        calls = [json.loads(line) for line in text.splitlines()]
+        kinds = [(call["role"], call["iteration"], call["strategy"]) for call in calls]
+        expected = [("solution", i, None) for i in (1, 2, 3, 4)]
+        self.assertEqual(kinds, [*expected, ("strategy", 4, 1), ("solution", 5, None)])
+        self.assertEqual(calls[1]["error"], "fake-model: down")
+        self.assertIsNone(calls[1]["reply"])
+        self.assertEqual(calls[4]["reply"], strategy_reply(GREEDY_STRATEGY))
+        # Tokens and cost, summed per role: the solution model has prices, the strategy model not
+        solution_in = sum(call["input_tokens"] for call in calls if call["role"] == "solution")
+        printed = self.console.getvalue()
+        self.assertIn(f"solution model: 5 calls, {solution_in} tokens in", printed)
+        self.assertIn("strategy model: 1 calls", printed)
+        self.assertIn("cost unknown", printed)
+
+    def test_run_json_holds_the_id_the_seed_and_the_system_messages(self) -> None:
+        self.run_toy(FakeLLM([BETTER]), iterations=1)
+        info = json.loads((self.output / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual((info["run_id"], info["seed"], info["problem"]), ("test-run", 1, "toy"))
+        self.assertIn("# Problem", info["system_messages"]["solution"])
+        self.assertIn("EvolvedSearchStrategy", info["system_messages"]["strategy"])
 
     def test_a_failed_strategy_model_call_is_a_rejection(self) -> None:
         solution_model = FakeLLM([RAISES] * 3)

@@ -2,9 +2,11 @@
 
 import math
 import unittest
+from dataclasses import replace
 
 from fakes import solution_with_score
 
+from my_evox.records import Result, Status
 from my_evox.store import SolutionInView, Store
 
 
@@ -44,13 +46,20 @@ class StoreTest(unittest.TestCase):
         self.assertIsNone(store.best())
         self.assertEqual(store.best_score(), -math.inf)
 
-    def test_the_view_lists_working_solutions_only(self) -> None:
+    def test_the_view_lists_ok_solutions_only(self) -> None:
         store = Store()
-        working, failed = solution_with_score(0.5), solution_with_score(None)
+        working = solution_with_score(0.5)
         store.add(working)
-        store.add(failed)
+        for status in (Status.FAILED, Status.INVALID, Status.TIMEOUT, Status.ERROR):
+            store.add(replace(solution_with_score(None), result=Result.failure(status, "no")))
         expected = (SolutionInView(working.id, 0.5, working.code),)
         self.assertEqual(store.view(), expected)
+
+    def test_counts_by_status_leave_out_the_missing_ones(self) -> None:
+        store = Store()
+        for score in (0.1, None, 0.2):
+            store.add(solution_with_score(score))
+        self.assertEqual(store.counts_by_status(), {Status.OK: 2, Status.FAILED: 1})
 
 
 if __name__ == "__main__":

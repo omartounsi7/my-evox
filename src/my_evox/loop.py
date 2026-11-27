@@ -9,25 +9,37 @@ meanwhile, since only one strategy is active (K = 1, D22). A new strategy that p
 checks is deployed and the old one retired. One that fails is rejected, and the old strategy
 keeps running for another trial of W children. A deployed strategy that fails while it runs is
 stood in for by the random strategy for that call (D36; strikes arrive in step 3.4).
+
+Every call to a model, failed ones included, is recorded in llm_calls.jsonl with its tokens,
+time and cost (D6), and the totals of each role are printed at the end.
 """
 
-import inspect
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from my_evox import console, solution_prompt, strategy_prompt
 from my_evox.evaluator import Evaluator
-from my_evox.generated_strategy import StrategyError, load_strategy, replay_and_check
 from my_evox.judge import Judge
-from my_evox.llm import LLM, LLMError
+from my_evox.llm import LLM, LLMError, LLMReply
 from my_evox.problem import Problem
 from my_evox.prompt import Prompt
-from my_evox.records import Solution, StrategyRecord, new_id
+from my_evox.records import LLMCall, Solution, StrategyRecord, Usage, new_id
 from my_evox.replies import extract_code
 from my_evox.run_folder import RunFolder
 from my_evox.store import Store
-from my_evox.strategies import RandomStrategy, SearchStrategy, Selection, strategy_rng
-from my_evox.strategy_writer import StrategyReply, write_strategy
+from my_evox.strategies import SearchStrategy, Selection, random_strategy_code, strategy_rng
+from my_evox.strategy_loader import (
+    LoadedStrategy,
+    StrategyError,
+    load_strategy,
+    replay_and_check,
+)
+from my_evox.strategy_writer import StrategyReply, parse_strategy_reply
+
+# The two roles a model can have (D5)
+SOLUTION_ROLE = "solution"
+STRATEGY_ROLE = "strategy"
 
 
 class RunError(Exception):
@@ -54,6 +66,7 @@ class Run:
         folder: RunFolder,
         iterations: int,
         seed: int,
+        run_id: str,
     ) -> None:
         self.problem: Problem = problem
         # The models that write solutions and strategies
@@ -65,11 +78,15 @@ class Run:
         self.iterations: int = iterations
         # The run's seed, from which every strategy's random generator is derived (D44)
         self.seed: int = seed
+        # Identifies the run, and labels its containers
+        self.run_id: str = run_id
+        # What each role's calls took
+        self.usage: dict[str, Usage] = {SOLUTION_ROLE: Usage(), STRATEGY_ROLE: Usage()}
         # Every solution of the run
         self.store: Store = Store()
         # The random strategy: the initial strategy (D17), and the stand-in for a strategy that
-        # fails while it runs (D36)
-        self.random_strategy: RandomStrategy = RandomStrategy(strategy_rng(seed, 0))
+        # fails while it runs (D36); and the active strategy, which it is at first
+        self.random_strategy: LoadedStrategy = load_random_strategy(seed)
         self.active: ActiveStrategy = initial_strategy(self.random_strategy)
         # How many strategies the strategy model has written, rejected ones included
         self.strategies_written: int = 0
@@ -83,8 +100,31 @@ class Run:
         if not result.works:
             raise RunError(f"the initial program gets no score: {result.error}")
         initial = Solution(new_id(), code, result, None, 0, None, None)
+        self.folder.save_run_info(self.run_info())
         self.keep(initial)
+        # The random strategy is checked like any other, though it is the framework's own code.
+        try:
+            replay_and_check(self.random_strategy, self.store)
+        except StrategyError as error:
+            raise RunError(f"the random strategy fails its checks: {error}") from error
         self.folder.save_strategy(self.active.record)
+
+    def run_info(self) -> dict[str, object]:
+        """Return what run.json says of the run: its id, seed, models and system messages."""
+        return {
+            "run_id": self.run_id,
+            "seed": self.seed,
+            "problem": self.problem.name,
+            "iterations": self.iterations,
+            "models": {
+                SOLUTION_ROLE: self.solution_llm.name,
+                STRATEGY_ROLE: self.strategy_llm.name,
+            },
+            "system_messages": {
+                SOLUTION_ROLE: solution_prompt.system_message(self.problem.description),
+                STRATEGY_ROLE: strategy_prompt.system_message(self.problem.strategies.window),
+            },
+        }
 
     def iterate(self, iteration: int) -> None:
         """Run one iteration: select, ask the solution model, evaluate, keep, observe, judge.
@@ -93,7 +133,9 @@ class Run:
         """
         selection = self.select()
         try:
-            reply = self.solution_llm.complete(self.prompt_for(selection))
+            reply = self.ask(
+                self.solution_llm, self.prompt_for(selection), SOLUTION_ROLE, iteration
+            )
         except LLMError as error:
             print(console.skipped_line(iteration, self.iterations, str(error)))
             return
@@ -109,9 +151,38 @@ class Run:
             self.replace_strategy(iteration)
 
     def finish(self) -> None:
-        """Write the active strategy's final score to strategies.jsonl."""
+        """Write the active strategy's final score to strategies.jsonl, and print what each
+        role's calls took."""
         final = replace(self.active.record, score=self.judge.strategy_score())
         self.folder.save_strategy(final)
+        for role, usage in self.usage.items():
+            print(console.usage_line(role, usage))
+
+    def ask(
+        self, llm: LLM, prompt: Prompt, role: str, iteration: int, strategy: int | None = None
+    ) -> str:
+        """Ask a model, record the call, and return the reply's text.
+
+        strategy is the number of the strategy being written, for a strategy call. Raises
+        LLMError, once the failed call is recorded, if the model gives no reply.
+        """
+        started = time.monotonic()
+        try:
+            reply = llm.complete(prompt)
+        except LLMError as error:
+            # A failed call has no reply: it is recorded with no tokens, and its error.
+            failed = LLMReply("", llm.name, 0, 0, time.monotonic() - started)
+            self.record_call(
+                call_record(role, iteration, strategy, prompt, failed, llm, str(error))
+            )
+            raise
+        self.record_call(call_record(role, iteration, strategy, prompt, reply, llm, None))
+        return reply.text
+
+    def record_call(self, call: LLMCall) -> None:
+        """Write a call to llm_calls.jsonl, and count it in its role's usage."""
+        self.folder.save_llm_call(call)
+        self.usage[call.role].add(call)
 
     def select(self) -> Selection:
         """Return the active strategy's selection; the random strategy's if the active one fails."""
@@ -125,10 +196,15 @@ class Run:
 
     def prompt_for(self, selection: Selection) -> Prompt:
         """Return the solution prompt for a selection: its parent, inspirations and direction."""
-        parent = self.store.get(selection.parent_id)
-        inspirations = [self.store.get(solution_id) for solution_id in selection.inspiration_ids]
-        direction = self.active.record.direction
-        return solution_prompt.build(self.problem.description, parent, inspirations, direction)
+        request = solution_prompt.Request(
+            parent=self.store.get(selection.parent_id),
+            inspirations=[self.store.get(solution_id) for solution_id in selection.inspiration_ids],
+            direction=self.active.record.direction,
+            change=selection.change,
+            best_score=self.store.best_score(),
+            max_result_chars=self.problem.prompt.max_result_chars,
+        )
+        return solution_prompt.build(self.problem.description, request)
 
     def make_child(self, reply: str, selection: Selection, iteration: int) -> Solution:
         """Return the child written in the reply, evaluated, and tagged with its origins."""
@@ -190,8 +266,10 @@ class Run:
         """
         self.strategies_written += 1
         number = self.strategies_written
+        prompt = self.strategy_prompt(iteration)
         try:
-            reply = write_strategy(self.strategy_llm, self.strategy_prompt(iteration))
+            text = self.ask(self.strategy_llm, prompt, STRATEGY_ROLE, iteration, number)
+            reply = parse_strategy_reply(text)
         except (LLMError, StrategyError) as error:
             self.reject(number, None, str(error))
             return None
@@ -216,6 +294,7 @@ class Run:
             self.iterations,
             self.active.record,
             self.judge.strategy_score(),
+            self.problem.prompt.max_result_chars,
         )
 
     def reject(self, number: int, reply: StrategyReply | None, error: str) -> None:
@@ -245,12 +324,43 @@ class Run:
         print(console.deployed_line(candidate.record.number, candidate.record.direction))
 
 
-def initial_strategy(random_strategy: RandomStrategy) -> ActiveStrategy:
+def call_record(
+    role: str,
+    iteration: int,
+    strategy: int | None,
+    prompt: Prompt,
+    reply: LLMReply,
+    llm: LLM,
+    error: str | None,
+) -> LLMCall:
+    """Return the record of one call: what was sent, what came back, and what it cost."""
+    return LLMCall(
+        role=role,
+        iteration=iteration,
+        strategy=strategy,
+        model=reply.model,
+        user_message=prompt.user,
+        reply=reply.text if error is None else None,
+        input_tokens=reply.input_tokens,
+        output_tokens=reply.output_tokens,
+        duration=reply.duration,
+        cost=llm.cost(reply),
+        error=error,
+    )
+
+
+def load_random_strategy(seed: int) -> LoadedStrategy:
+    """Return the random strategy, loaded from its code like any strategy, as number 0."""
+    return load_strategy(random_strategy_code(), strategy_rng(seed, 0))
+
+
+def initial_strategy(random_strategy: LoadedStrategy) -> ActiveStrategy:
     """Return the random strategy as the run's first active strategy, number 0 (D17).
 
-    Its record holds its source code, which the strategy model sees when it replaces it.
+    Its record holds its code, which the strategy model sees when it replaces it: the same code
+    the run loaded, written as the strategy model must write its own.
     """
-    code = inspect.getsource(RandomStrategy)
+    code = random_strategy_code()
     record = StrategyRecord(new_id(), 0, "active", code, direction=None, analysis=None)
     return ActiveStrategy(random_strategy, record)
 
@@ -263,6 +373,7 @@ def run(
     iterations: int,
     output: Path,
     seed: int,
+    run_id: str,
 ) -> Store:
     """Run the whole evolution and return its store of solutions.
 
@@ -270,7 +381,7 @@ def run(
     holds a run.
     """
     folder = RunFolder(output, problem.initial_program.suffix)
-    the_run = Run(problem, solution_llm, strategy_llm, evaluator, folder, iterations, seed)
+    the_run = Run(problem, solution_llm, strategy_llm, evaluator, folder, iterations, seed, run_id)
     the_run.start()
     for iteration in range(1, iterations + 1):
         the_run.iterate(iteration)

@@ -1,0 +1,252 @@
+{
+  "circle_outside.py": {
+    "evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.1941826343536377,
+        "sum_radii": 0.0,
+        "target_ratio": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "Circle 25 outside unit square"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.006584644317626953,
+        "sum_radii": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    }
+  },
+  "grid_with_prints.py": {
+    "evaluator.py": {
+      "combined_score": 0.963946869070209,
+      "metrics": {
+        "combined_score": 0.963946869070209,
+        "eval_time": 0.18253517150878906,
+        "sum_radii": 2.5400000000000005,
+        "target_ratio": 0.963946869070209,
+        "validity": 1.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {},
+      "combined_score": 2.5400000000000005,
+      "metrics": {
+        "combined_score": 2.5400000000000005,
+        "eval_time": 0.00726008415222168,
+        "sum_radii": 2.5400000000000005,
+        "validity": 1.0
+      },
+      "status": "success"
+    }
+  },
+  "initial_program.py": {
+    "evaluator.py": {
+      "combined_score": 0.36423689449571406,
+      "metrics": {
+        "combined_score": 0.36423689449571406,
+        "eval_time": 0.20552825927734375,
+        "sum_radii": 0.9597642169962064,
+        "target_ratio": 0.36423689449571406,
+        "validity": 1.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {},
+      "combined_score": 0.9597642169962064,
+      "metrics": {
+        "combined_score": 0.9597642169962064,
+        "eval_time": 0.010289192199707031,
+        "sum_radii": 0.9597642169962064,
+        "validity": 1.0
+      },
+      "status": "success"
+    }
+  },
+  "m0_haiku_best.py": {
+    "evaluator.py": {
+      "combined_score": 0.9645991047594663,
+      "metrics": {
+        "combined_score": 0.9645991047594663,
+        "eval_time": 5.115185976028442,
+        "sum_radii": 2.5417186410411934,
+        "target_ratio": 0.9645991047594663,
+        "validity": 1.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {},
+      "combined_score": 2.5417186410411934,
+      "metrics": {
+        "combined_score": 2.5417186410411934,
+        "eval_time": 4.802709102630615,
+        "sum_radii": 2.5417186410411934,
+        "validity": 1.0
+      },
+      "status": "success"
+    }
+  },
+  "m0_haiku_iteration_5.py": {
+    "evaluator.py": {
+      "combined_score": 0.9985166359469055,
+      "metrics": {
+        "combined_score": 0.9985166359469055,
+        "eval_time": 3.652374029159546,
+        "sum_radii": 2.631091335720096,
+        "target_ratio": 0.9985166359469055,
+        "validity": 1.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {},
+      "combined_score": 2.631091335720096,
+      "metrics": {
+        "combined_score": 2.631091335720096,
+        "eval_time": 3.175675868988037,
+        "sum_radii": 2.631091335720096,
+        "validity": 1.0
+      },
+      "status": "success"
+    }
+  },
+  "m0_haiku_iteration_6.py": {
+    "evaluator.py": {
+      "combined_score": 0.963768125615764,
+      "metrics": {
+        "combined_score": 0.963768125615764,
+        "eval_time": 22.359307527542114,
+        "sum_radii": 2.539529010997538,
+        "target_ratio": 0.963768125615764,
+        "validity": 1.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {},
+      "combined_score": 2.539529010997538,
+      "metrics": {
+        "combined_score": 2.539529010997538,
+        "eval_time": 22.653119802474976,
+        "sum_radii": 2.539529010997538,
+        "validity": 1.0
+      },
+      "status": "success"
+    }
+  },
+  "not_a_number.py": {
+    "evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.3195769786834717,
+        "sum_radii": 0.0,
+        "target_ratio": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "NaN values in output"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.0061817169189453125,
+        "sum_radii": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    }
+  },
+  "overlapping_circles.py": {
+    "evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.1977555751800537,
+        "sum_radii": 0.0,
+        "target_ratio": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "Circles 0 and 25 overlap"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.004328489303588867,
+        "sum_radii": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    }
+  },
+  "raises.py": {
+    "evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.0,
+        "sum_radii": 0.0,
+        "target_ratio": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "no packing today\nTraceback (most recent call last):\n  File \"/skydiscover/benchmarks/math/circle_packing/evaluator/evaluator.py\", line 92, in main\n    centers, radii, _ = run_program(program_path)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/skydiscover/benchmarks/math/circle_packing/evaluator/evaluator.py\", line 37, in run_program\n    return prog.run_packing()\n           ^^^^^^^^^^^^^^^^^^\n  File \"/parity/circle_packing/raises.py\", line 5, in run_packing\n    raise ValueError(\"no packing today\")\nValueError: no packing today\n"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.0,
+        "sum_radii": 0.0,
+        "validity": 0.0
+      },
+      "status": "error"
+    }
+  },
+  "wrong_shape.py": {
+    "evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.23076748847961426,
+        "sum_radii": 0.0,
+        "target_ratio": 0.0,
+        "validity": 0.0
+      },
+      "status": "success"
+    },
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "Wrong shapes: centers=(25, 2), radii=(25,)"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.006117343902587891,
+        "sum_radii": 0.0,
+        "validity": 0.0
+      },
+      "status": "error"
+    }
+  }
+}

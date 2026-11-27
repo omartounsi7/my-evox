@@ -1,0 +1,92 @@
+{
+  "fibonacci_sphere.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.7174870661191577,
+      "metrics": {
+        "combined_score": 0.7174870661191577,
+        "eval_time": 0.00042128562927246094,
+        "min_max_ratio": 0.17223066270962759
+      },
+      "status": "success"
+    }
+  },
+  "identical_points.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 1.7404556274414062e-05,
+        "min_max_ratio": 0.0
+      },
+      "status": "success"
+    }
+  },
+  "initial_program.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.017991314578709408,
+      "metrics": {
+        "combined_score": 0.017991314578709408,
+        "eval_time": 0.025110244750976562,
+        "min_max_ratio": 0.004318762217790128
+      },
+      "status": "success"
+    }
+  },
+  "list_with_prints.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.024649998621301777,
+      "metrics": {
+        "combined_score": 0.024649998621301777,
+        "eval_time": 5.0067901611328125e-05,
+        "min_max_ratio": 0.00591715976331361
+      },
+      "status": "success"
+    }
+  },
+  "not_a_number.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0,
+        "eval_time": 0.023815155029296875,
+        "min_max_ratio": 0.0
+      },
+      "status": "success"
+    }
+  },
+  "raises.py": {
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "no points today"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0
+      },
+      "status": "error"
+    }
+  },
+  "rhombic_dodecahedron.py": {
+    "evaluator/evaluator.py": {
+      "combined_score": 0.7810968313124999,
+      "metrics": {
+        "combined_score": 0.7810968313124999,
+        "eval_time": 4.5299530029296875e-05,
+        "min_max_ratio": 0.18749999999999997
+      },
+      "status": "success"
+    }
+  },
+  "wrong_shape.py": {
+    "evaluator/evaluator.py": {
+      "artifacts": {
+        "error": "Invalid shapes: points = (13, 3), expected (14, 3)"
+      },
+      "combined_score": 0.0,
+      "metrics": {
+        "combined_score": 0.0
+      },
+      "status": "error"
+    }
+  }
+}

@@ -3,10 +3,11 @@ and a model that replies with texts written in advance."""
 
 from pathlib import Path
 
-from my_evox.llm import LLM
+from my_evox.evaluator import Evaluator, LocalRunner
+from my_evox.llm import LLM, LLMReply
 from my_evox.problem import Problem
 from my_evox.prompt import Prompt
-from my_evox.records import Result, Solution, new_id
+from my_evox.records import Result, Solution, Status, new_id
 
 # The toy problem's folder: solve() returns a number, scored as that number divided by 10
 TOY = Path(__file__).parent / "toy"
@@ -17,6 +18,12 @@ def toy_problem() -> Problem:
     return Problem.load(TOY / "problem.yaml", TOY / "initial_program.py", TOY / "evaluator")
 
 
+def toy_evaluator(problem: Problem | None = None) -> Evaluator:
+    """Return an evaluator of the toy problem (or of problem) that runs its evaluator.py on this
+    machine, without Docker."""
+    return Evaluator(LocalRunner(problem or toy_problem()))
+
+
 def toy_program(answer: str) -> str:
     """Return a toy program whose solve() returns the Python expression answer."""
     return f"def solve():\n    return {answer}\n"
@@ -24,7 +31,7 @@ def toy_program(answer: str) -> str:
 
 def solution_with_score(score: float | None, iteration: int = 1) -> Solution:
     """Return a child solution with this score; None makes it a failed one."""
-    result = Result(score=score) if score is not None else Result(score=None, error="it broke")
+    result = Result.ok(score) if score is not None else Result.failure(Status.FAILED, "it broke")
     return Solution(
         id=new_id(),
         code=toy_program(str(score)),
@@ -42,22 +49,31 @@ class FakeLLM(LLM):
     A reply that is an exception is raised instead of returned, as a failing model would.
     """
 
-    def __init__(self, replies: list[str | Exception], name: str = "fake-model") -> None:
-        super().__init__(name)
+    def __init__(
+        self,
+        replies: list[str | Exception],
+        name: str = "fake-model",
+        price_input: float | None = None,
+        price_output: float | None = None,
+    ) -> None:
+        super().__init__(name, price_input, price_output)
         # The replies still to give, first one first
         self.replies: list[str | Exception] = list(replies)
         # Every prompt received, in order
         self.prompts: list[Prompt] = []
 
-    def complete(self, prompt: Prompt) -> str:
-        """Return the next reply written in advance, or raise it if it is an exception."""
+    def complete(self, prompt: Prompt) -> LLMReply:
+        """Return the next reply written in advance, or raise it if it is an exception.
+
+        The tokens are counted as one per word of the user message and of the reply.
+        """
         self.prompts.append(prompt)
         if not self.replies:
             raise AssertionError("FakeLLM: no reply left to give")
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
-        return reply
+        return LLMReply(reply, self.name, len(prompt.user.split()), len(reply.split()), 0.01)
 
 
 # A strategy the fake strategy model writes: always the best solution, asking for a refinement.

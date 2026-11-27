@@ -107,16 +107,34 @@ depended on Python in my-evolve becomes language-neutral or is done per language
 - **Problems**, in order: circle packing in the unit square (26 circles) and MinMaxMinDist (14 points in 3
   dimensions); then ALE-Bench-Lite's 10 problems, starting from ALE-Agent's C++ solutions, as in the paper.
 - **Everything about a problem comes from skydiscover's benchmarks**, unchanged: the initial program, the
-  problem description (its `prompt.system_message`), and the evaluator, so that scores are the paper's.
-  One exception, which leaves scores alone: circle packing's container evaluator uses two things Windows
-  lacks (`SIGALRM` for its time limit, `/tmp` for its log), so both are made portable, and marked in the
-  file, so that the first steps can run it outside a container.
+  problem description (its `prompt.system_message`), and the evaluator the paper's runs used, so that
+  scores are the paper's. skydiscover's reproduce scripts, in its first release (March 2026) and since,
+  give every math problem its top-level `evaluator.py`, run on the host, where skydiscover's `math` extra
+  was installed; the `evaluator/` folders, with a `Dockerfile`, came ten days after that release.
 - **Evaluators run as containers** (skydiscover's container protocol: a `Dockerfile` and an `evaluate.sh`
-  that receives the program's path and prints JSON), never in the main process (D10). For circle packing
-  this is the `evaluator/` folder's version; the top-level `evaluator.py` runs programs on the host.
-- To check when the plan reaches them: that skydiscover's two circle-packing evaluators score every program
-  alike; how the `ale_bench` package, which ALE-Bench-Lite's evaluator calls and which is installed
-  separately, runs on this machine (it is believed to judge programs in its own containers).
+  that receives the program's path and prints JSON), never in the main process (D10). The evaluator the
+  paper's runs used goes into the container as it is; an old `evaluate()`-style one is bridged by
+  skydiscover's own `wrapper.py`, as skydiscover does for its other such evaluators. The image installs
+  the packages of skydiscover's `math` extra at the versions its first release locked for Python 3.12
+  (torch as its CPU build), so that programs can import what the paper's could.
+- **Checked** (step 1.4): circle packing's two evaluators, on deterministic programs, agree on the sum of
+  the radii and on validity, but they differ in two ways. The top-level one, which the problem keeps,
+  scores the sum of the radii over 2.635, AlphaEvolve's result (the paper's tables give the sum itself:
+  the metric `sum_radii`); the container version scores the sum. And a program that raises, or returns
+  the wrong shape, gets validity 0 from the top-level one (status `invalid`), an error from the other
+  (`failed`). Programs that search for a fixed wall-clock time score differently on different machines,
+  so the parity tests use deterministic ones only.
+- **Checked** (step 1.5): MinMaxMinDist has one evaluator, the container version, whose `evaluate()` is
+  the first release's, unchanged but for the order of its imports; the problem keeps it. It scores the
+  squared ratio of the smallest to the largest distance over AlphaEvolve's (the paper's tables give the
+  inverse, lower being better), gives the score 0 to an answer with NaN or with all points equal, and
+  reports an error (`failed`) for a program that raises or returns the wrong shape.
+- **The packages matter**: without scipy, as in Milestone 0's runs, a child of that milestone that uses
+  scipy when it can reached a sum of radii of 2.505; with the paper's packages, the same code reaches
+  2.631.
+- To check when the plan reaches it: how the `ale_bench` package, which ALE-Bench-Lite's evaluator calls
+  and which is installed separately, runs on this machine (it is believed to judge programs in its own
+  containers).
 
 ---
 
@@ -532,7 +550,8 @@ Its text is Appendix B; the wording may be improved, the structure is decided.
   the reply format.
 - **User message**, new for each strategy, in this order: the problem description, verbatim (the same as
   in the solution prompt); the run so far (iteration, best score, records, counts by status); the
-  population statistics (D30); the 5 best solutions, by score and description, without code; the other
+  population statistics (D30); the 5 best solutions, by score, description and results (the evaluator's
+  metrics and artifacts, cut as in the solution prompt, D38), without code; the other
   active strategies when $K > 1$, with the instruction to complement them; the strategy to revise (D27);
   the other past strategies (D28); the task.
 - **Past strategies** are shown with their direction, score, records and near misses, outcomes per change
@@ -548,6 +567,9 @@ Its text is Appendix B; the wording may be improved, the structure is decided.
   *Why:* in Milestone 0 two analyses credited a change size with records it had not set (the records came
   from `free` and `diverge` children, the analyses credited `refine`), and strategies 2 and 3, each
   revising the one before, ended with nearly the same direction.
+- **Results say what a score means.** *Why:* in Milestone 1 the prompt showed only scores, and on circle
+  packing the strategy model read 0.998, a sum of radii of 2.630 divided by 2.635, as a sum far below the
+  description's 2.635; its next two directions asked for new layouts to close a gap that was 0.2%.
 - **No other solution code** appears: descriptions say which approaches exist, and ALE-Bench-Lite programs
   of up to 45 KB (about 12,000 tokens each) would make the prompt too long.
 

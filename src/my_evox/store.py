@@ -7,7 +7,7 @@ a tuple of frozen records, so that nothing they do can change a solution (D11).
 import math
 from dataclasses import dataclass
 
-from my_evox.records import Solution
+from my_evox.records import Solution, Status
 
 
 @dataclass(frozen=True)
@@ -62,10 +62,18 @@ class Store:
     def view(self) -> tuple[SolutionInView, ...]:
         """Return what strategies may read: the working solutions, in the order they were added.
 
-        Failed solutions are left out, so that no strategy can choose one as a parent.
+        Solutions whose status is not ok are left out, so that no strategy can choose one.
         """
         entries = []
         for solution in self.solutions.values():
-            if solution.score is not None:
+            if solution.result.works and solution.score is not None:
                 entries.append(SolutionInView(solution.id, solution.score, solution.code))
         return tuple(entries)
+
+    def counts_by_status(self) -> dict[Status, int]:
+        """Return how many solutions ended with each status, in Status's order, leaving out
+        the statuses no solution has."""
+        counts = {status: 0 for status in Status}
+        for solution in self.solutions.values():
+            counts[solution.result.status] += 1
+        return {status: count for status, count in counts.items() if count > 0}

@@ -8,6 +8,7 @@ from my_evox.problem import Problem, ProblemError
 
 TOY = Path(__file__).parent / "toy"
 CIRCLE_PACKING = Path(__file__).parent.parent / "problems" / "circle_packing"
+MIN_MAX_MIN_DIST = Path(__file__).parent.parent / "problems" / "min_max_min_dist_3"
 
 # A complete problem file, which each test breaks in its own way
 VALID_FILE = """\
@@ -16,6 +17,8 @@ description: Return a large number.
 llm:
   model: fake-model
   api_base: http://localhost:1/v1
+evaluation:
+  timeout: 20
 strategies:
   window: 3
   threshold: 0.5
@@ -43,7 +46,7 @@ class ProblemTest(unittest.TestCase):
         self.assertEqual(problem.strategies.threshold, 0.5)
 
     def test_the_problems_files_load(self) -> None:
-        """The toy problem and circle packing, as committed, are valid."""
+        """The toy problem, circle packing and MinMaxMinDist, as committed, are valid."""
         toy = Problem.load(TOY / "problem.yaml", TOY / "initial_program.py", TOY / "evaluator")
         self.assertEqual(toy.name, "toy")
         circle_packing = Problem.load(
@@ -52,6 +55,13 @@ class ProblemTest(unittest.TestCase):
             CIRCLE_PACKING / "evaluator",
         )
         self.assertIn("26 circles", circle_packing.description)
+        min_max_min_dist = Problem.load(
+            MIN_MAX_MIN_DIST / "problem.yaml",
+            MIN_MAX_MIN_DIST / "initial_program.py",
+            MIN_MAX_MIN_DIST / "evaluator",
+        )
+        self.assertIn("exactly 14 points in 3D space", min_max_min_dist.description)
+        self.assertEqual(min_max_min_dist.evaluation.timeout, 360)
 
     def test_a_missing_key_is_named_with_its_place(self) -> None:
         text = VALID_FILE.replace("  api_base: http://localhost:1/v1\n", "")
@@ -79,21 +89,35 @@ class ProblemTest(unittest.TestCase):
         self.assertIsNone(self.load_text(VALID_FILE).llm.api_key_env)
         self.assertIsNone(self.load_text(VALID_FILE).llm.max_tokens)
         extra = "  api_key: ${ANTHROPIC_API_KEY}\n  max_tokens: 16000\n"
-        text = VALID_FILE.replace("strategies:", extra + "strategies:")
+        text = VALID_FILE.replace("evaluation:", extra + "evaluation:")
         llm = self.load_text(text).llm
         self.assertEqual((llm.api_key_env, llm.max_tokens), ("ANTHROPIC_API_KEY", 16000))
 
     def test_a_key_written_in_the_file_is_refused(self) -> None:
         for value in ("sk-ant-secret", "ANTHROPIC_API_KEY", "'${A}${B}'"):
             with self.subTest(value=value):
-                text = VALID_FILE.replace("strategies:", f"  api_key: {value}\nstrategies:")
+                text = VALID_FILE.replace("evaluation:", f"  api_key: {value}\nevaluation:")
                 with self.assertRaisesRegex(ProblemError, "must name an environment variable"):
                     self.load_text(text)
 
     def test_max_tokens_is_a_whole_number_of_at_least_one(self) -> None:
-        text = VALID_FILE.replace("strategies:", "  max_tokens: 0\nstrategies:")
+        text = VALID_FILE.replace("evaluation:", "  max_tokens: 0\nevaluation:")
         with self.assertRaisesRegex(ProblemError, "'max_tokens' in the llm section"):
             self.load_text(text)
+
+    def test_the_time_limit_is_a_number_above_zero(self) -> None:
+        self.assertEqual(self.load_text(VALID_FILE).evaluation.timeout, 20.0)
+        for value in ("0", "-5", "soon"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ProblemError, "'timeout' in the evaluation section"):
+                    self.load_text(VALID_FILE.replace("timeout: 20", f"timeout: {value}"))
+
+    def test_the_prompt_section_is_optional(self) -> None:
+        self.assertEqual(self.load_text(VALID_FILE).prompt.max_result_chars, 2000)
+        problem = self.load_text(VALID_FILE + "prompt:\n  max_result_chars: 300\n")
+        self.assertEqual(problem.prompt.max_result_chars, 300)
+        with self.assertRaisesRegex(ProblemError, "'max_result_chars' in the prompt section"):
+            self.load_text(VALID_FILE + "prompt:\n  max_result_chars: 0\n")
 
     def test_the_window_is_a_whole_number_of_at_least_one(self) -> None:
         for value in ("0", "2.5", "true", "five"):

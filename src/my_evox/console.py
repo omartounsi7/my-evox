@@ -3,7 +3,7 @@
 Logging, with a log file and a summary at the end, replaces these prints in step 5.1.
 """
 
-from my_evox.records import Solution, format_score
+from my_evox.records import Solution, Usage, format_score
 
 # The longest error or direction shown on a line; the run folder's files keep the whole text
 MAX_SHOWN_CHARS = 150
@@ -19,13 +19,13 @@ def iteration_line(
 ) -> str:
     """Return the line printed after an iteration.
 
-    It shows the child's score or error, the best score, and the active strategy with its
-    score J (D24).
+    It shows the child's score, or its status and error; the best score; and the active
+    strategy with its score J (D24).
     """
-    if child.result.error is not None:
-        outcome = f"error: {short_error(child.result.error)}"
-    else:
+    if child.result.works:
         outcome = f"score {format_score(child.score)}"
+    else:
+        outcome = f"{child.result.status.value}: {short_error(child.result.error or '')}"
     strategy = f"strategy {strategy_number}, J = {format_score(strategy_score)}"
     return f"iteration {iteration}/{iterations}: {outcome}; best {format_score(best)}; {strategy}"
 
@@ -59,6 +59,15 @@ def rejected_line(strategy_number: int, error: str, active_number: int) -> str:
 def strategy_failed_line(strategy_number: int, error: str, consequence: str) -> str:
     """Return the line printed when the active strategy fails while it runs (D36)."""
     return f"strategy {strategy_number} failed: {short_error(error)}; {consequence}"
+
+
+def usage_line(role: str, usage: Usage) -> str:
+    """Return the line printed at the end of a run about one role's calls (D6)."""
+    spent = f"${usage.cost:.4f}" if usage.cost is not None else "cost unknown"
+    return (
+        f"{role} model: {usage.calls} calls, {usage.input_tokens} tokens in, "
+        f"{usage.output_tokens} tokens out, {spent}"
+    )
 
 
 def short_error(error: str) -> str:

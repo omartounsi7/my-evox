@@ -5,14 +5,14 @@ import unittest
 
 from fakes import GREEDY_STRATEGY, solution_with_score
 
-from my_evox.generated_strategy import (
+from my_evox.store import Store
+from my_evox.strategies import Selection
+from my_evox.strategy_loader import (
     StrategyError,
     checked_selection,
     load_strategy,
     replay_and_check,
 )
-from my_evox.store import Store
-from my_evox.strategies import Selection
 
 # A strategy that remembers what it observed, and picks the first working solution it saw
 RECORDING_STRATEGY = """\

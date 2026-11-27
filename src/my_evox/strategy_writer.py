@@ -1,17 +1,16 @@
-"""The strategy writer, basic: asks the strategy model for a new strategy and reads its reply.
+"""The strategy writer, basic: reads the strategy model's reply when it writes a new strategy.
 
 The reply has three parts, in Appendix B's format: an analysis between <ANALYSIS> tags, a
 direction between <DIRECTION> tags, then the class EvolvedSearchStrategy in a fenced code
-block. Checks beyond these parts (the direction's cap, the code's length) arrive in step 3.6,
-and repairing a failed strategy in step 3.7.
+block. The loop asks the model, so that the call is recorded like every other. Checks beyond
+these parts (the direction's cap, the code's length) arrive in step 3.6, and repairing a failed
+strategy in step 3.7.
 """
 
 from dataclasses import dataclass
 
-from my_evox.generated_strategy import StrategyError
-from my_evox.llm import LLM
-from my_evox.prompt import Prompt
 from my_evox.replies import extract_tagged, find_code_block, text_after
+from my_evox.strategy_loader import StrategyError
 
 
 @dataclass(frozen=True)
@@ -24,14 +23,6 @@ class StrategyReply:
     direction: str
     # The code of the class EvolvedSearchStrategy
     code: str
-
-
-def write_strategy(llm: LLM, prompt: Prompt) -> StrategyReply:
-    """Ask the strategy model for a strategy and return the three parts of its reply.
-
-    Raises LLMError if the model gives no reply, StrategyError if a part is missing.
-    """
-    return parse_strategy_reply(llm.complete(prompt))
 
 
 def parse_strategy_reply(reply: str) -> StrategyReply:

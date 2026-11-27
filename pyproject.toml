@@ -15,8 +15,6 @@ requires-python = ">=3.11"
 dependencies = [
     "openai>=1.0",  # talks to LLM servers that offer the OpenAI-compatible interface
     "pyyaml>=6",    # reads the problem files
-    "numpy",        # imported by circle packing's evaluator and programs, which run on this
-                    #   machine until evaluators move into containers (step 1.2)
 ]
 
 [project.optional-dependencies]
@@ -27,6 +25,10 @@ dev = [
     "types-PyYAML",  # type information for pyyaml, which mypy needs
 ]
 
+[tool.setuptools.package-data]
+# The built-in strategies' code, read as text and run like a strategy the strategy model writes
+my_evox = ["builtin_strategies/*.py"]
+
 [tool.setuptools.packages.find]
 # Tells setuptools that the package lives inside the src folder
 where = ["src"]
@@ -34,6 +36,9 @@ where = ["src"]
 [tool.mypy]
 # The folders mypy checks when run with no arguments
 files = ["src", "scripts", "tests"]
+# Not checked: the parity tests' programs, written as an LLM writes them, and the built-in
+# strategies, code run in a strategy's namespace rather than modules
+exclude = ["^tests/parity/[^/]+/", "^src/my_evox/builtin_strategies/"]
 # Where mypy finds the my_evox package when checking a single file
 mypy_path = "src"
 # Turn on every check, including "every function must have type hints"
@@ -46,9 +51,16 @@ native_parser = false
 line-length = 100
 # The oldest Python version the code must keep working on
 target-version = "py311"
-# skydiscover's problem files stay as skydiscover wrote them (D3); the code in Markdown
-# files is laid out by hand, to be read
-extend-exclude = ["problems/*/initial_program.py", "problems/*/evaluator", "*.md"]
+# skydiscover's problem files stay as skydiscover wrote them (D3); the parity tests' programs
+# are written as an LLM writes them; the built-in strategies use names their namespace gives
+# them; the code in Markdown files is laid out by hand, to be read
+extend-exclude = [
+    "problems/*/initial_program.py",
+    "problems/*/evaluator",
+    "tests/parity/*/",
+    "src/my_evox/builtin_strategies",
+    "*.md",
+]
 
 [tool.ruff.lint]
 # Rule families to enforce:
@@ -58,3 +70,7 @@ extend-exclude = ["problems/*/initial_program.py", "problems/*/evaluator", "*.md
 select = ["E", "W", "F", "I", "B", "UP", "N"]
 # Exceptions may be named for what happened (StrategyRejected), without an "Error" suffix
 ignore = ["N818"]
+
+[tool.ruff.lint.per-file-ignores]
+# skydiscover's operator templates are kept verbatim (D14), long lines included
+"src/my_evox/operators.py" = ["E501"]

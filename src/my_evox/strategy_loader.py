@@ -1,12 +1,14 @@
-"""Strategies written by the strategy model: loaded, checked, and run in the run's process.
+"""Strategies as code: loaded, checked, and run in the run's process.
 
-The strategy model writes a class named EvolvedSearchStrategy (D11). Its code is run with exec,
-in a namespace that already holds the names the interface uses (Selection, SearchStrategy,
-Solution, SolutionInView, MAX_INSPIRATIONS, CHANGE_SIZES, and the random module, whose Random
-type the constructor receives); the code may import anything else it needs. The class is then
-built with the strategy's own random generator (D44) and wrapped in a GeneratedStrategy, which
-checks every answer. Before it is deployed, a strategy replays every stored solution through
-observe (D16) and is asked to select once: a strategy that fails anywhere is rejected.
+A strategy is the code of a class named EvolvedSearchStrategy (D11): written by the strategy
+model, or, for the built-in random strategy, by hand in exactly the same form. Its code is run
+with exec, in a namespace that already holds the names the interface uses (Selection,
+SearchStrategy, Solution, SolutionInView, MAX_INSPIRATIONS, CHANGE_SIZES, and the random module,
+whose Random type the constructor receives); the code may import anything else it needs. The
+class is then built with the strategy's own random generator (D44) and wrapped in a
+LoadedStrategy, which checks every answer. Before it is deployed, a strategy replays every stored
+solution through observe (D16) and is asked to select once: a strategy that fails anywhere is
+rejected.
 
 LLM-written code runs here, in the run's process, with your files and network and without a
 time limit, until strategies move into their own process (step 3.1) and into Docker (3.2).
@@ -29,8 +31,8 @@ class StrategyError(Exception):
     """Raised when a strategy the strategy model wrote breaks a rule; the message says how."""
 
 
-class GeneratedStrategy(SearchStrategy):
-    """A strategy the strategy model wrote, with every call checked.
+class LoadedStrategy(SearchStrategy):
+    """A strategy loaded from its code, with every call checked.
 
     An exception inside the strategy, or an invalid answer from select, becomes a StrategyError.
     """
@@ -55,7 +57,7 @@ class GeneratedStrategy(SearchStrategy):
         return checked_selection(answer, view)
 
 
-def load_strategy(code: str, rng: random.Random) -> GeneratedStrategy:
+def load_strategy(code: str, rng: random.Random) -> LoadedStrategy:
     """Run the strategy model's code and return its strategy, built with rng.
 
     Raises StrategyError if the code does not run, defines no usable EvolvedSearchStrategy, or
@@ -76,7 +78,7 @@ def load_strategy(code: str, rng: random.Random) -> GeneratedStrategy:
         instance = strategy_class(rng)
     except Exception as error:
         raise StrategyError(f"{CLASS_NAME}(rng) raised {describe(error)}") from error
-    return GeneratedStrategy(instance)
+    return LoadedStrategy(instance)
 
 
 def strategy_namespace() -> dict[str, Any]:
@@ -97,7 +99,7 @@ def strategy_namespace() -> dict[str, Any]:
     }
 
 
-def replay_and_check(strategy: GeneratedStrategy, store: Store) -> None:
+def replay_and_check(strategy: LoadedStrategy, store: Store) -> None:
     """Prepare a new strategy for deployment, checking it on the way.
 
     Every stored solution is replayed through observe, in order, so that the strategy's state

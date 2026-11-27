@@ -3,7 +3,7 @@
 import json
 import unittest
 
-from my_evox.records import Result, Solution, format_score, new_id
+from my_evox.records import Result, Solution, Status, format_score, new_id
 
 
 def child_solution() -> Solution:
@@ -11,7 +11,7 @@ def child_solution() -> Solution:
     return Solution(
         id=new_id(),
         code="def solve():\n    return 3\n",
-        result=Result(score=0.3, metrics={"validity": 1.0}),
+        result=Result.ok(0.3, metrics={"validity": 1.0}),
         parent_id=new_id(),
         iteration=7,
         strategy_id=new_id(),
@@ -20,20 +20,28 @@ def child_solution() -> Solution:
 
 
 class ResultTest(unittest.TestCase):
-    def test_a_result_has_a_score_or_an_error(self) -> None:
-        """A score with an error, or neither, contradicts itself and is refused."""
+    def test_only_an_ok_result_has_a_score(self) -> None:
+        """Every combination that contradicts itself is refused."""
         with self.assertRaises(ValueError):
-            Result(score=0.5, error="it broke")
+            Result(Status.OK)
         with self.assertRaises(ValueError):
-            Result(score=None)
+            Result(Status.OK, score=0.5, error="it broke")
+        with self.assertRaises(ValueError):
+            Result(Status.FAILED, score=0.5, error="it broke")
+        with self.assertRaises(ValueError):
+            Result(Status.INVALID)
 
-    def test_works_when_there_is_a_score(self) -> None:
-        self.assertTrue(Result(score=0.0).works)
-        self.assertFalse(Result(score=None, error="it broke").works)
+    def test_only_an_ok_result_works(self) -> None:
+        self.assertTrue(Result.ok(0.0).works)
+        for status in (Status.FAILED, Status.INVALID, Status.TIMEOUT, Status.ERROR):
+            self.assertFalse(Result.failure(status, "it broke").works)
 
     def test_round_trip(self) -> None:
-        result = Result(score=None, error="ValueError: no")
-        self.assertEqual(Result.from_dict(result.to_dict()), result)
+        for result in (Result.ok(0.5, {"n": 1.0}), Result.failure(Status.TIMEOUT, "too slow")):
+            self.assertEqual(Result.from_dict(result.to_dict()), result)
+
+    def test_the_status_is_saved_by_its_name(self) -> None:
+        self.assertEqual(Result.failure(Status.INVALID, "overlap").to_dict()["status"], "invalid")
 
 
 class SolutionTest(unittest.TestCase):
@@ -45,7 +53,7 @@ class SolutionTest(unittest.TestCase):
 
     def test_the_initial_program_round_trips(self) -> None:
         """The initial program has no parent, strategy or change: None survives the trip."""
-        initial = Solution(new_id(), "code", Result(score=1.0), None, 0, None, None)
+        initial = Solution(new_id(), "code", Result.ok(1.0), None, 0, None, None)
         self.assertEqual(Solution.from_dict(initial.to_dict()), initial)
 
     def test_a_missing_key_is_named(self) -> None:

@@ -5,14 +5,18 @@ A strategy has two methods:
     select(view)    called before each of its iterations, with a read-only view of the
                     working solutions; it returns a Selection.
 
-SearchStrategy is the interface every strategy of the framework follows. The random strategy,
-the paper's initial strategy (D17), is written here by hand. Strategies written by the strategy
-model define a class named EvolvedSearchStrategy with the same two methods.
+SearchStrategy is the interface every strategy follows, as the framework sees it. Every
+strategy is code that defines a class named EvolvedSearchStrategy with the same two methods,
+loaded by strategy_loader.py: those the strategy model writes, and the random strategy, the
+paper's initial strategy (D17), written by hand in the same form, in
+builtin_strategies/random_strategy.py, so that the code the strategy model is shown runs as it
+stands when copied.
 """
 
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from importlib import resources
 
 from my_evox.records import Solution
 from my_evox.store import SolutionInView
@@ -21,6 +25,8 @@ from my_evox.store import SolutionInView
 CHANGE_SIZES = ("free", "refine", "diverge")
 # The most inspirations a strategy may show besides the parent (D12)
 MAX_INSPIRATIONS = 4
+# The random strategy's code, a file of the package read as text
+RANDOM_STRATEGY_FILE = "builtin_strategies/random_strategy.py"
 
 
 @dataclass(frozen=True)
@@ -47,27 +53,9 @@ class SearchStrategy(ABC):
         """Choose the parent, the inspirations and the change size of the next iteration."""
 
 
-class RandomStrategy(SearchStrategy):
-    """The paper's initial strategy: everything drawn uniformly, always the "free" change (D17)."""
-
-    def __init__(self, rng: random.Random) -> None:
-        # The strategy's own random generator (D44)
-        self.rng: random.Random = rng
-
-    def observe(self, child: Solution) -> None:
-        """Learn nothing: the draws depend on the view alone."""
-
-    def select(self, view: tuple[SolutionInView, ...]) -> Selection:
-        """Draw a parent, then up to MAX_INSPIRATIONS other solutions, all uniformly.
-
-        Raises ValueError if the view is empty.
-        """
-        if not view:
-            raise ValueError("there is no working solution to choose from")
-        parent = self.rng.choice(view)
-        others = [solution for solution in view if solution.id != parent.id]
-        inspirations = self.rng.sample(others, min(MAX_INSPIRATIONS, len(others)))
-        return Selection(parent.id, "free", tuple(solution.id for solution in inspirations))
+def random_strategy_code() -> str:
+    """Return the code of the random strategy, the paper's initial strategy (D17)."""
+    return resources.files("my_evox").joinpath(RANDOM_STRATEGY_FILE).read_text(encoding="utf-8")
 
 
 def strategy_rng(seed: int, number: int) -> random.Random:

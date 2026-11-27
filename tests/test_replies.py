@@ -29,7 +29,7 @@ class FakeLLMTest(unittest.TestCase):
     def test_replies_in_order_and_prompts_remembered(self) -> None:
         model = FakeLLM(["one", LLMError("fake-model: down")])
         prompt = Prompt(system="s", user="u")
-        self.assertEqual(model.complete(prompt), "one")
+        self.assertEqual(model.complete(prompt).text, "one")
         with self.assertRaises(LLMError):
             model.complete(prompt)
         self.assertEqual(model.prompts, [prompt, prompt])

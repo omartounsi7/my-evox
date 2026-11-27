@@ -14,11 +14,18 @@ in YAML, holds the rest. For now it holds:
                                              #   needs none
       max_tokens: 16000                      # optional: the longest reply, in tokens; the
                                              #   server's default if absent
+      price_input: 0.10                      # optional: dollars per million prompt tokens
+      price_output: 0.50                     # optional: dollars per million reply tokens
+    evaluation:
+      timeout: 360                           # seconds an evaluation may take; over it, the
+                                             #   child gets the status timeout
     strategies:
       window: 5                              # W: a strategy stagnates when none of its last
                                              #   W children set a record above tau (D25)
       threshold: 0.0                         # tau: the smallest gain counted as progress,
                                              #   in score units, 0 or more
+    prompt:                                  # optional
+      max_result_chars: 2000                 # each result shown in a prompt is cut to this
 
 Every key is checked: a missing key, or one the code does not know, is an error that names it
 and says where it is (D45). New keys arrive with the features that use them.
@@ -54,6 +61,26 @@ class LLMSettings:
     api_key_env: str | None = None
     # The longest reply, in tokens; None to leave it to the server
     max_tokens: int | None = None
+    # Dollars per million tokens of prompt and of reply, for the cost of each call (D6); None
+    # when unknown
+    price_input: float | None = None
+    price_output: float | None = None
+
+
+@dataclass(frozen=True)
+class EvaluationSettings:
+    """How solutions are evaluated."""
+
+    # The longest an evaluation may take, in seconds
+    timeout: float
+
+
+@dataclass(frozen=True)
+class PromptSettings:
+    """How the solution prompt is laid out (D38)."""
+
+    # The longest any one result of a solution (a metric or an artifact) is shown, in characters
+    max_result_chars: int = 2000
 
 
 @dataclass(frozen=True)
@@ -80,8 +107,12 @@ class Problem:
     evaluator_folder: Path
     # The model that writes solutions
     llm: LLMSettings
+    # How solutions are evaluated
+    evaluation: EvaluationSettings
     # How strategies are judged
     strategies: StrategySettings
+    # How the solution prompt is laid out
+    prompt: PromptSettings
 
     @property
     def evaluator_script(self) -> Path:
@@ -105,7 +136,10 @@ class Problem:
     def from_data(cls, data: Any, initial_program: Path, evaluator_folder: Path) -> "Problem":
         """Build a problem from the parsed problem file, checking every value."""
         top = checked_section(
-            data, "the problem file", required={"name", "description", "llm", "strategies"}
+            data,
+            "the problem file",
+            required={"name", "description", "llm", "evaluation", "strategies"},
+            optional={"prompt"},
         )
         return cls(
             name=checked_text(top, "name", "the problem file"),
@@ -113,16 +147,17 @@ class Problem:
             initial_program=initial_program,
             evaluator_folder=evaluator_folder,
             llm=build_llm(top["llm"]),
+            evaluation=build_evaluation(top["evaluation"]),
             strategies=build_strategies(top["strategies"]),
+            prompt=build_prompt(top.get("prompt", {})),
         )
 
 
 def build_llm(section: Any) -> LLMSettings:
     """Return the settings of the llm section, checked."""
     where = "the llm section"
-    llm = checked_section(
-        section, where, required={"model", "api_base"}, optional={"api_key", "max_tokens"}
-    )
+    optional = {"api_key", "max_tokens", "price_input", "price_output"}
+    llm = checked_section(section, where, required={"model", "api_base"}, optional=optional)
     api_key_env = checked_key_variable(llm, "api_key", where) if "api_key" in llm else None
     max_tokens = checked_positive_integer(llm, "max_tokens", where) if "max_tokens" in llm else None
     return LLMSettings(
@@ -130,6 +165,33 @@ def build_llm(section: Any) -> LLMSettings:
         api_base=checked_text(llm, "api_base", where),
         api_key_env=api_key_env,
         max_tokens=max_tokens,
+        price_input=optional_price(llm, "price_input", where),
+        price_output=optional_price(llm, "price_output", where),
+    )
+
+
+def optional_price(section: dict[str, Any], key: str, where: str) -> float | None:
+    """Return a price of the llm section, a number of 0 or more; None if it is absent."""
+    if key not in section:
+        return None
+    return checked_number_at_least_zero(section, key, where)
+
+
+def build_evaluation(section: Any) -> EvaluationSettings:
+    """Return the settings of the evaluation section, checked."""
+    where = "the evaluation section"
+    evaluation = checked_section(section, where, required={"timeout"})
+    return EvaluationSettings(timeout=checked_positive_number(evaluation, "timeout", where))
+
+
+def build_prompt(section: Any) -> PromptSettings:
+    """Return the settings of the prompt section, checked; the defaults for what it leaves out."""
+    where = "the prompt section"
+    prompt = checked_section(section, where, required=set(), optional={"max_result_chars"})
+    if "max_result_chars" not in prompt:
+        return PromptSettings()
+    return PromptSettings(
+        max_result_chars=checked_positive_integer(prompt, "max_result_chars", where)
     )
 
 
@@ -211,6 +273,14 @@ def checked_positive_integer(section: dict[str, Any], key: str, where: str) -> i
         message = f"{key!r} in {where} must be a whole number of at least 1, got {value!r}"
         raise ProblemError(message)
     return value
+
+
+def checked_positive_number(section: dict[str, Any], key: str, where: str) -> float:
+    """Return the value of a key that must hold a number above 0."""
+    value = section[key]
+    if isinstance(value, bool) or not isinstance(value, int | float) or not value > 0:
+        raise ProblemError(f"{key!r} in {where} must be a number above 0, got {value!r}")
+    return float(value)
 
 
 def checked_number_at_least_zero(section: dict[str, Any], key: str, where: str) -> float:
